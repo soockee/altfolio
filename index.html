@@ -208,7 +208,7 @@
       loginBtn.hidden = !!token;
       logoutBtn.hidden = !token;
       if (token) {
-        statusEl.textContent = "Signed in.\naccess_token: " + token;
+        statusEl.textContent = "Signed in.";
         statusEl.classList.remove("error");
       } else if (!statusEl.classList.contains("error")) {
         statusEl.textContent = "Not signed in.";
