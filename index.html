@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>altfolio</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 34rem;
+    margin: 4rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.5;
+  }
+  pre {
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 0.75rem;
+    border-radius: 0.3rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  button {
+    font: inherit;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+  }
+  .error { color: #c0392b; }
+  section { margin-top: 2rem; }
+</style>
+</head>
+<body>
+  <h1>altfolio</h1>
+
+  <section>
+    <h2>Redirect URI</h2>
+    <p>Register this exact URL as the redirect URI on your OAuth client:</p>
+    <pre id="redirect-uri"></pre>
+  </section>
+
+  <section>
+    <h2>Sign in</h2>
+    <button id="login-btn">Sign in with Battle.net</button>
+    <pre id="status">Not signed in.</pre>
+  </section>
+
+  <script src="oauth-config.js"></script>
+  <script src="oauth.js"></script>
+  <script>
+    document.getElementById("redirect-uri").textContent = window.OAUTH_CONFIG.redirectUri;
+    document.getElementById("login-btn").addEventListener("click", () => BnetAuth.login());
+
+    const statusEl = document.getElementById("status");
+    const result = BnetAuth.parseCallback();
+    if (result && result.error) {
+      statusEl.textContent = result.error;
+      statusEl.classList.add("error");
+    } else if (result && result.code) {
+      statusEl.textContent =
+        "Received authorization code:\n" + result.code +
+        "\n\nExchanging this for a token requires a server-side call " +
+        "(client_secret + Battle.net's token endpoint doesn't allow " +
+        "browser CORS) — not implemented yet.";
+    }
+  </script>
+</body>
+</html>
