@@ -18,7 +18,7 @@ Then I wanted to have eye-candy for the presentation of the data... then I was d
 
 # Disclaimer
 
-Totally junkfood code. took my go-to AI and me 1 hour.
+Totally junkfood code. took my go-to AI and me 1 hour. Another hour of debugging AI.
 
 Data via Blizzard Entertainment. altfolio is a non-commercial fan project, not
 affiliated with or endorsed by Blizzard.
