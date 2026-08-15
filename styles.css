@@ -59,6 +59,13 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute is how every view in this app is switched off, and
+   any author `display` rule silently beats the UA stylesheet's
+   `[hidden] { display: none }` — which is how a `display: flex` landing hero
+   ends up still on screen while the loading stage runs behind it. This makes
+   `hidden` mean hidden, whatever a layout rule says. */
+[hidden] { display: none !important; }
+
 html {
   /* Proximity, not mandatory: chapters are taller than the viewport on small
      screens, and mandatory snapping traps you mid-chart. */
@@ -371,53 +378,263 @@ pre {
 }
 .hero-caption code { font-size: 0.95em; }
 
-/* --- landing setup detail & loading ----------------------------------------- */
-
 .landing-setup { text-align: left; font-size: 0.8rem; color: var(--text-secondary); }
 .landing-setup summary { cursor: pointer; color: var(--text-muted); }
 .landing-setup p { margin: 0.75rem 0 0.4rem; }
 
-.load-steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* --- loading stage ---------------------------------------------------------
+   The wait is up to a minute on a large account, so it gets a screen rather
+   than a spinner. Deliberately built from the landing hero's parts — same
+   orbs, same centred column, same eyebrow — because it replaces the landing
+   page in place, and it should read as that page continuing to work rather
+   than a different screen having taken over. */
+
+/* Set by the inline boot script when we already know we're skipping the
+   landing page — see index.html. Beats toggling `hidden` from main.js, which
+   can't run until the landing markup has already had a chance to paint. */
+.is-booting #landing { display: none; }
+
+.stage {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 100svh;
   display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  max-width: 34rem;
+  align-items: center;
+  justify-content: center;
+  padding: 6rem clamp(1.25rem, 5vw, 3rem) 4rem;
+  text-align: center;
 }
 
-.load-step {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--surface-1);
-  color: var(--text-muted);
-}
-.load-step[data-state="active"] { color: var(--text-primary); border-color: var(--series-1); }
-.load-step[data-state="done"] { color: var(--text-secondary); }
-.load-step[data-state="failed"] { color: var(--text-secondary); border-color: color-mix(in srgb, var(--critical) 40%, transparent); }
+.stage-inner { position: relative; width: 100%; max-width: 36rem; margin: 0 auto; }
 
-/* State is named in the marker, not carried by colour alone. */
-.load-step-label::before {
-  display: inline-block;
-  width: 1.4rem;
-  color: var(--text-muted);
-  content: "○";
-}
-.load-step[data-state="active"] .load-step-label::before { content: "◍"; color: var(--series-1); }
-.load-step[data-state="done"] .load-step-label::before { content: "●"; color: var(--series-1); }
-.load-step[data-state="failed"] .load-step-label::before { content: "✕"; color: var(--critical); }
-
-.load-step-note {
-  flex: none;
+.stage-eyebrow {
+  margin: 0 0 1.75rem;
   font-size: 0.8rem;
-  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--series-1);
+}
+
+/* --- progress ring --- */
+
+.stage-ring-wrap {
+  position: relative;
+  width: 9rem;
+  height: 9rem;
+  margin: 0 auto 1.5rem;
+}
+
+/* Rotated so the arc fills from twelve o'clock. The percentage sits outside
+   the SVG, so it stays upright. */
+.stage-ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+.stage-ring-track { fill: none; stroke: var(--gridline); stroke-width: 8; }
+
+.stage-ring-fill {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+/* A dashed ring that turns for as long as the stage is up. The arc below only
+   moves when a request lands — on a slow single read that can be many seconds
+   apart, and a frozen ring reads as a hang. This never stops, so the screen is
+   never still. */
+.stage-ring-spin {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 2;
+  stroke-dasharray: 2 12;
+  stroke-linecap: round;
+  opacity: 0.45;
+  transform-origin: 64px 64px;
+}
+
+.stage-ring-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+}
+.stage-ring-pct-sign { font-size: 0.9rem; color: var(--text-muted); margin-left: 0.1rem; align-self: center; }
+
+/* --- headline & live note --- */
+
+.stage-headline {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.5rem, 4.5vw, 2.1rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 650;
+}
+
+/* Reserved height: the note swaps between a sentence and a "12 of 47" counter
+   several times a second, and letting it resize would shake the whole column. */
+.stage-note {
+  margin: 0 auto 1.75rem;
+  max-width: 26rem;
+  min-height: 3em;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+/* --- phase rail --- */
+
+.stage-rail {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem 1.25rem;
+  margin: 0 0 1.75rem;
+  padding: 0;
+}
+
+.stage-rail-step {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.stage-rail-step[data-state="active"] { color: var(--text-primary); font-weight: 600; }
+.stage-rail-step[data-state="done"] { color: var(--text-secondary); }
+
+/* State is in the glyph, not only the colour. */
+.stage-rail-dot::before { content: "○"; color: var(--text-muted); }
+.stage-rail-step[data-state="active"] .stage-rail-dot::before { content: "◍"; color: var(--series-1); }
+.stage-rail-step[data-state="done"] .stage-rail-dot::before { content: "●"; color: var(--series-1); }
+.stage-rail-step[data-state="failed"] .stage-rail-dot::before { content: "✕"; color: var(--critical); }
+
+/* --- character stream --- */
+
+/* Two rows are reserved whether or not two are used. Chips arrive and leave
+   constantly, and how many rows they wrap onto depends on name lengths and
+   viewport width — letting the block resize would walk the counters up and
+   down the screen for the whole minute. */
+.stage-stream {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 4.3rem;
+  margin-bottom: 1rem;
+}
+
+.stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+/* Faction is the one thing about a passing character worth colouring, and it
+   uses the same two inks the Factions chapter does. */
+.stage-chip[data-faction="Alliance"] { border-color: color-mix(in srgb, var(--alliance) 45%, transparent); }
+.stage-chip[data-faction="Horde"] { border-color: color-mix(in srgb, var(--horde) 45%, transparent); }
+
+.stage-chip-icon { flex: none; width: 15px; height: 15px; }
+.stage-chip-name { font-weight: 500; color: var(--text-primary); }
+.stage-chip-level { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* --- counters --- */
+
+.stage-counters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+}
+
+/* column-reverse: the markup is dt-then-dd as it must be, the tile reads
+   value-then-label as it should. */
+.stage-counter {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.15rem;
+  padding: 0.8rem 0.5rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+}
+.stage-counter-value {
+  margin: 0;
+  font-size: clamp(1.3rem, 4.5vw, 1.7rem);
+  font-weight: 650;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.stage-counter-label { font-size: 0.7rem; color: var(--text-muted); line-height: 1.3; }
+
+/* --- rotating fact --- */
+
+.stage-fact {
+  margin: 0;
+  min-height: 3em;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.stage-warn {
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--critical);
+  padding-left: 0.75rem;
+  text-align: left;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stage-ring-spin { animation: stage-spin 9s linear infinite; }
+  .stage-chip { animation: stage-chip-in 0.35s ease backwards; }
+  .stage-fact.is-entering { animation: stage-fact-in 0.4s ease backwards; }
+}
+
+@keyframes stage-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes stage-chip-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.94); }
+}
+@keyframes stage-fact-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-ring-fill { transition: none; }
+}
+
+@media (max-width: 26rem) {
+  .stage-counters { grid-template-columns: 1fr; }
+  .stage-counter { flex-direction: row-reverse; align-items: baseline; justify-content: flex-end; gap: 0.5rem; }
+}
+
+/* Landing -> stage -> recap are one page swapping what it shows, so the
+   incoming view fades up rather than cutting in. Deliberately a plain CSS
+   animation and not the View Transitions API: the swap itself is already done
+   by the time this runs, so a browser that never animates still shows the
+   right thing — see the note on show() in main.js. */
+@media (prefers-reduced-motion: no-preference) {
+  .view-enter { animation: view-enter 0.4s ease backwards; }
+}
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(10px); }
 }
 
 /* --- hero & KPI tiles ----------------------------------------------------- */

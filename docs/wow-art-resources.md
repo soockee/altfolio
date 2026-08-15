@@ -79,10 +79,11 @@ Two art elements, deliberately not more — see "why not everywhere" below.
 
 - **Class icons**, broadly. A small icon leads every class name: each row of
   the Classes chapter's bar chart ([journey-ui.js](../journey-ui.js)'s
-  `classesChapter`), and the Class column of the roster table in the
-  Appendix. Cheap to use everywhere it appears — there are at most 13
-  distinct classes, so however large the roster, this is at most 13 image
-  fetches, memoized in [media.js](../media.js) so repeats are free.
+  `classesChapter`), the Class column of the roster table in the Appendix,
+  and every character chip streaming past on the loading stage
+  ([stage.js](../stage.js)). Cheap to use everywhere it appears — there are
+  at most 13 distinct classes, so however large the roster, this is at most
+  13 image fetches, memoized in [media.js](../media.js) so repeats are free.
 - **One character portrait**, narrowly. The Races chapter's "first traces of
   you" callout — the single most personally-specific fact in the whole
   recap — gets that character's Armory avatar next to the text
@@ -92,22 +93,39 @@ Two art elements, deliberately not more — see "why not everywhere" below.
   most people are scanning for numbers, not portraits) for a UX payoff that
   doesn't scale the same way class icons do.
 
-Both fetch **live through the Worker**, never bundled:
+Both fetch **live from Blizzard**, never bundled:
 
-- `GET /media/class?id=<classId>` — class icons are public Game Data, not
-  tied to any player, so the Worker authenticates as *itself*
-  (`client_credentials` grant, same `CLIENT_ID`/`CLIENT_SECRET` as the OAuth
-  code exchange) rather than forwarding the caller's token, and the response
-  is cached at Cloudflare's edge for a day since the artwork never changes.
-- `GET /media/character?realm=<slug>&character=<name>` — character
-  portraits are per-character *profile* data, so this needs the signed-in
-  user's own `wow.profile`-scoped token, same as `/character` and
-  `/achievements`.
+- **Class icons** go straight to the render CDN
+  (`render.worldofwarcraft.com/<region>/icons/56/classicon_<slug>.jpg`),
+  which is exactly the URL the Game Data media endpoint hands back. The class
+  id → slug map lives in [media.js](../media.js). Only if that path doesn't
+  load — a class id the map hasn't heard of, or a CDN layout that has since
+  moved — does it fall back to `GET /media/class?id=<classId>` on the Worker,
+  which reads `/data/wow/media/playable-class/{id}` from the `static-<region>`
+  namespace. That route authenticates as the *app* (`client_credentials`
+  grant, same `CLIENT_ID`/`CLIENT_SECRET` as the OAuth code exchange) rather
+  than forwarding the caller's token, since class art isn't tied to any
+  player, and caches at Cloudflare's edge for a day.
+
+  It's worth being explicit about why the fallback isn't the primary: an
+  API-first order makes every class icon on the page depend on the Worker
+  being deployed and reachable, and the first time that wasn't true, every
+  icon in the app silently vanished at once. A hardcoded URL is still a live
+  fetch from Blizzard on every page load — what the terms ask for is that the
+  *art* isn't committed to the repo, and it isn't.
+
+- **Character portraits** need `GET /media/character?realm=<slug>&character=<name>`
+  on the Worker and have no equivalent shortcut: the render URL contains a
+  per-character hash that only the profile API knows. Being per-character
+  profile data, it needs the signed-in user's own `wow.profile`-scoped token,
+  same as `/character` and `/achievements`. This one genuinely does go dark
+  if the Worker hasn't been redeployed with the route.
 
 Every resolution in [media.js](../media.js) fails to `null` rather than
 throwing — a 404 (a very old or very low-level character can genuinely have
 no render) just leaves that icon slot empty. Nothing about art loading can
-break a chapter; the recap already stood on its own without any of this.
+break a chapter or the loading stage; both stood on their own without any of
+this.
 
 Attribution: the existing sitewide footer ("Data via Blizzard
 Entertainment…") already covers art the same way it covers the underlying

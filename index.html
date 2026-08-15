@@ -6,6 +6,29 @@
 <title>altfolio — your WoW journey</title>
 <meta name="description" content="Sign in with Battle.net and see your World of Warcraft history rebuilt as a scrollable recap, ending in a verdict on who you've been all along." />
 <link rel="stylesheet" href="styles.css" />
+<script>
+  // Runs before the landing markup is parsed. Returning from Battle.net, or
+  // arriving with a token still in session, both go straight to work — and
+  // without this the landing page paints for a frame first, which reads as
+  // being bounced back to the start rather than carried forward. main.js
+  // clears the class the moment it takes over the view.
+  try {
+    var s = window.location.search;
+    if (s.indexOf("code=") !== -1 || s.indexOf("error=") !== -1 || sessionStorage.getItem("bnet_access_token")) {
+      document.documentElement.classList.add("is-booting");
+      // Safety net: if main.js never gets to take over — a script that 404s,
+      // a blocked CDN — the landing page comes back rather than the tab
+      // staying blank. In the normal case main.js has already cleared this
+      // within a frame or two of parse.
+      setTimeout(function () {
+        document.documentElement.classList.remove("is-booting");
+      }, 4000);
+    }
+  } catch (e) {
+    // Storage blocked (private mode, third-party cookie rules). The landing
+    // page showing for a frame is the correct fallback, not a failure.
+  }
+</script>
 </head>
 <body>
   <header class="topbar">
@@ -58,16 +81,9 @@
       </div>
     </section>
 
-    <section id="loading" class="chapter is-visible" hidden>
-      <div class="chapter-inner">
-        <p class="chapter-eyebrow">Working</p>
-        <h2 class="chapter-headline">Rebuilding your journey…</h2>
-        <p class="chapter-lede">
-          Achievement history is one request per character, so a big roster takes a moment.
-        </p>
-        <ol id="load-steps" class="load-steps"></ol>
-      </div>
-    </section>
+    <!-- Built by stage.js. Empty here on purpose: it only ever exists mid-run,
+         and its contents are driven entirely by data arriving. -->
+    <section id="loading" class="stage" hidden></section>
 
     <div id="journey" hidden></div>
   </main>
@@ -89,6 +105,7 @@
   <script src="charts.js"></script>
   <script src="share-card.js"></script>
   <script src="journey-ui.js"></script>
+  <script src="stage.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

@@ -33,6 +33,11 @@
   // Rejections are captured rather than thrown: one character that 404s (too
   // low level, recently renamed or transferred) must not take down the whole
   // journey. Returns [{ item, value } | { item, error }, ...].
+  //
+  // onProgress also receives the result that just settled, so a caller can
+  // show what it is working on rather than only how far along it is — the
+  // loading stage reads it to stream real characters past the viewer while a
+  // big roster grinds through.
   async function settleLimit(items, fn, onProgress) {
     const results = new Array(items.length);
     let next = 0;
@@ -47,7 +52,7 @@
           results[index] = { item: items[index], error };
         }
         done++;
-        if (onProgress) onProgress(done, items.length);
+        if (onProgress) onProgress(done, items.length, results[index]);
       }
     }
 

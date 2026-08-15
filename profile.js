@@ -35,6 +35,8 @@
   // firmer end-of-life signal than the last achievement a character happened
   // to earn. Returns a character key -> timestamp(ms) map; characters whose
   // detail read fails are simply absent.
+  //
+  // onProgress is (done, total, settled) — see settleLimit in api.js.
   async function fetchLastLogins(accessToken, characters, onProgress) {
     const cfg = window.OAUTH_CONFIG;
     const withRealm = characters.filter((c) => c.realmSlug);
