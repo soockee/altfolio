@@ -1,9 +1,9 @@
-// Minimal horizontal bar charts for the character breakdowns (faction /
-// race / class). Each chart is a single magnitude series (character count
-// per category), so it takes one sequential hue rather than a categorical
-// palette — see the data-viz skill's color formula: "nominal categorical ...
-// each bar takes the same slot-1 hue" when color isn't encoding identity
-// beyond what the label already shows.
+// Dashboard pieces for the character breakdowns: a KPI row of stat tiles and
+// horizontal bar-chart cards (faction / race / class). Each bar chart is a
+// single magnitude series (character count per category), so it takes one
+// sequential hue rather than a categorical palette — see the data-viz skill's
+// color formula: "nominal categorical ... each bar takes the same slot-1 hue"
+// when color isn't encoding identity beyond what the label already shows.
 (function () {
   let tooltipEl = null;
 
@@ -37,15 +37,71 @@
     if (tooltipEl) tooltipEl.hidden = true;
   }
 
-  // data: [{ label, count }, ...] — renders into `container`, replacing its contents.
-  function renderBarChart(container, title, data) {
+  // tiles: [{ label, value, sub }, ...] — renders into `container`, replacing its contents.
+  function renderKpiRow(container, tiles) {
     container.classList.add("viz-root");
     container.replaceChildren();
 
-    const heading = document.createElement("h3");
-    heading.className = "chart-title";
-    heading.textContent = title;
-    container.appendChild(heading);
+    for (const { label, value, sub } of tiles) {
+      const tile = document.createElement("div");
+      tile.className = "kpi-tile";
+
+      const labelEl = document.createElement("span");
+      labelEl.className = "kpi-label";
+      labelEl.textContent = label;
+
+      const valueEl = document.createElement("span");
+      valueEl.className = "kpi-value";
+      valueEl.textContent = value;
+
+      tile.append(labelEl, valueEl);
+
+      if (sub) {
+        const subEl = document.createElement("span");
+        subEl.className = "kpi-sub";
+        subEl.textContent = sub;
+        tile.appendChild(subEl);
+      }
+
+      container.appendChild(tile);
+    }
+  }
+
+  // data: [{ label, count }, ...] — renders into `container`, replacing its contents.
+  function renderBarChart(container, title, data) {
+    container.classList.add("viz-root", "chart-card");
+    container.replaceChildren();
+
+    const total = data.reduce((sum, d) => sum + d.count, 0);
+
+    const header = document.createElement("div");
+    header.className = "chart-header";
+
+    const heading = document.createElement("div");
+    const titleEl = document.createElement("h3");
+    titleEl.className = "chart-title";
+    titleEl.textContent = title;
+    const subEl = document.createElement("p");
+    subEl.className = "chart-subtitle";
+    subEl.textContent = total === 1 ? "1 character" : `${total} characters`;
+    heading.append(titleEl, subEl);
+    header.appendChild(heading);
+
+    if (data.length > 0) {
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "chart-toggle";
+      toggle.textContent = "View as table";
+      header.appendChild(toggle);
+      toggle.addEventListener("click", () => {
+        const showTable = table.hidden;
+        table.hidden = !showTable;
+        rows.hidden = showTable;
+        toggle.textContent = showTable ? "View as chart" : "View as table";
+      });
+    }
+
+    container.appendChild(header);
 
     if (data.length === 0) {
       const empty = document.createElement("p");
@@ -55,7 +111,6 @@
       return;
     }
 
-    const total = data.reduce((sum, d) => sum + d.count, 0);
     const max = Math.max(...data.map((d) => d.count));
 
     const rows = document.createElement("div");
@@ -91,7 +146,44 @@
     }
 
     container.appendChild(rows);
+
+    // Table view: the accessibility twin of the chart, kept in sync with the same data.
+    const table = document.createElement("table");
+    table.className = "chart-table";
+    table.hidden = true;
+
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    for (const text of [title, "Count", "Share"]) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = text;
+      headRow.appendChild(th);
+    }
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const { label, count } of data) {
+      const tr = document.createElement("tr");
+
+      const th = document.createElement("th");
+      th.scope = "row";
+      th.textContent = label;
+
+      const countTd = document.createElement("td");
+      countTd.textContent = String(count);
+
+      const pctTd = document.createElement("td");
+      pctTd.textContent = total ? `${Math.round((count / total) * 100)}%` : "0%";
+
+      tr.append(th, countTd, pctTd);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+
+    container.appendChild(table);
   }
 
-  window.BnetCharts = { renderBarChart };
+  window.BnetCharts = { renderKpiRow, renderBarChart };
 })();
