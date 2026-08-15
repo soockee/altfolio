@@ -22,12 +22,30 @@ export default {
       return handleToken(request, env, cors);
     }
 
-    if (request.method === "GET" && url.pathname === "/profile") {
-      return handleProfile(request, env, cors);
-    }
+    if (request.method === "GET") {
+      // The WoW Account Profile Summary — the list of the signed-in user's
+      // characters across their linked WoW accounts, with class/race/faction/
+      // level per character. Requires the `wow.profile` OAuth scope.
+      if (url.pathname === "/profile") {
+        return proxy(request, env, cors, "/profile/user/wow");
+      }
 
-    if (request.method === "GET" && url.pathname === "/achievements") {
-      return handleAchievements(request, env, cors);
+      // Both per-character reads take the same realm/character pair.
+      if (url.pathname === "/character" || url.pathname === "/achievements") {
+        const realm = url.searchParams.get("realm");
+        const character = url.searchParams.get("character");
+        if (!realm || !character) {
+          return new Response("Missing realm or character", { status: 400, headers: cors });
+        }
+
+        // Character Profile Summary carries `last_login_timestamp`, the only
+        // first-class "when was this played" field in the API. The
+        // achievements summary carries a `completed_timestamp` per
+        // achievement — the closest thing to a history the API exposes,
+        // since there is no playtime or character-creation-date endpoint.
+        const base = `/profile/wow/character/${encodeURIComponent(realm.toLowerCase())}/${encodeURIComponent(character.toLowerCase())}`;
+        return proxy(request, env, cors, url.pathname === "/achievements" ? `${base}/achievements` : base);
+      }
     }
 
     return new Response("Not found", { status: 404, headers: cors });
@@ -74,43 +92,17 @@ async function handleToken(request, env, cors) {
   });
 }
 
-// Proxies the WoW Account Profile Summary — the list of the signed-in
-// user's characters across their linked WoW accounts, with class/race/
-// faction/level per character. Requires the `wow.profile` OAuth scope.
-async function handleProfile(request, env, cors) {
+// Every profile read is the same shape: require the caller's bearer token,
+// forward it to the profile namespace, hand the response straight back. The
+// Worker never inspects or stores the token — it only relays it, because the
+// browser can't reach api.blizzard.com itself (no CORS headers there).
+async function proxy(request, env, cors, apiPath) {
   const auth = request.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) {
     return new Response("Missing bearer token", { status: 401, headers: cors });
   }
 
-  const apiUrl = `https://${env.REGION}.api.blizzard.com/profile/user/wow?namespace=profile-${env.REGION}&locale=en_US`;
-  const apiRes = await fetch(apiUrl, { headers: { Authorization: auth } });
-
-  return new Response(await apiRes.text(), {
-    status: apiRes.status,
-    headers: { ...cors, "Content-Type": "application/json" },
-  });
-}
-
-// Proxies the WoW Character Achievements Summary — every achievement a
-// character has completed, each with a completed_timestamp. This is the
-// only place the Battle.net API exposes anything historical; there's no
-// playtime or character-creation-date endpoint. Requires the `wow.profile`
-// OAuth scope, same as /profile.
-async function handleAchievements(request, env, cors) {
-  const auth = request.headers.get("Authorization") || "";
-  if (!auth.startsWith("Bearer ")) {
-    return new Response("Missing bearer token", { status: 401, headers: cors });
-  }
-
-  const url = new URL(request.url);
-  const realm = url.searchParams.get("realm");
-  const character = url.searchParams.get("character");
-  if (!realm || !character) {
-    return new Response("Missing realm or character", { status: 400, headers: cors });
-  }
-
-  const apiUrl = `https://${env.REGION}.api.blizzard.com/profile/wow/character/${encodeURIComponent(realm.toLowerCase())}/${encodeURIComponent(character.toLowerCase())}/achievements?namespace=profile-${env.REGION}&locale=en_US`;
+  const apiUrl = `https://${env.REGION}.api.blizzard.com${apiPath}?namespace=profile-${env.REGION}&locale=en_US`;
   const apiRes = await fetch(apiUrl, { headers: { Authorization: auth } });
 
   return new Response(await apiRes.text(), {

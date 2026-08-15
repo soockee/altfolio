@@ -3,304 +3,73 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>altfolio</title>
-<style>
-  :root { color-scheme: light dark; }
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    max-width: 46rem;
-    margin: 4rem auto;
-    padding: 0 1.5rem;
-    line-height: 1.5;
-  }
-  pre {
-    background: color-mix(in srgb, currentColor 8%, transparent);
-    padding: 0.75rem;
-    border-radius: 0.3rem;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-  button {
-    font: inherit;
-    padding: 0.5rem 1rem;
-    cursor: pointer;
-  }
-  .error { color: #c0392b; }
-  section { margin-top: 2rem; }
-
-  .viz-root {
-    --surface-1: #fcfcfb;
-    --text-primary: #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted: #898781;
-    --border: rgba(11, 11, 11, 0.10);
-    --series-1: #2a78d6;
-    --row-hover: color-mix(in srgb, var(--series-1) 10%, transparent);
-  }
-  @media (prefers-color-scheme: dark) {
-    .viz-root {
-      --surface-1: #1a1a19;
-      --text-primary: #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted: #898781;
-      --border: rgba(255, 255, 255, 0.10);
-      --series-1: #3987e5;
-      --row-hover: color-mix(in srgb, var(--series-1) 16%, transparent);
-    }
-  }
-
-  #stats-section h2 { margin-bottom: 1rem; }
-
-  /* KPI row */
-  .kpi-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
-  }
-  .kpi-tile {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: 0.6rem;
-    padding: 0.85rem 1rem;
-  }
-  .kpi-label { font-size: 0.78rem; color: var(--text-muted); }
-  .kpi-value { font-size: 1.5rem; font-weight: 600; color: var(--text-primary); }
-  .kpi-sub { font-size: 0.78rem; color: var(--text-secondary); }
-
-  /* Chart cards */
-  #stats { display: flex; flex-direction: column; gap: 1rem; }
-  .chart-card {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: 0.6rem;
-    padding: 1.1rem 1.25rem;
-  }
-  .chart-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-  .chart-title { margin: 0; font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
-  .chart-subtitle { margin: 0.1rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
-  .chart-toggle {
-    flex: none;
-    padding: 0.3rem 0.6rem;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 0.4rem;
-  }
-  .chart-toggle:hover, .chart-toggle:focus-visible { background: var(--row-hover); color: var(--text-primary); }
-
-  .chart-rows { display: flex; flex-direction: column; gap: 4px; }
-  .chart-rows[hidden], .chart-table[hidden] { display: none; }
-  .chart-empty { color: var(--text-muted); margin: 0; }
-
-  .bar-row {
-    display: grid;
-    grid-template-columns: 9.5rem 1fr 2.5rem;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 4px 6px;
-    border-radius: 4px;
-    outline: none;
-  }
-  .bar-row:hover, .bar-row:focus-visible { background: var(--row-hover); }
-  .bar-label {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .bar-track { height: 18px; }
-  .bar-fill {
-    height: 100%;
-    min-width: 4px;
-    background: var(--series-1);
-    border-radius: 0 4px 4px 0;
-    transition: width 0.4s ease;
-  }
-  .bar-value {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Table view (accessibility twin of the bar chart) */
-  .chart-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  .chart-table th, .chart-table td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
-  .chart-table th[scope="col"] { color: var(--text-muted); font-weight: 500; font-size: 0.78rem; }
-  .chart-table td, .chart-table th[scope="row"] { color: var(--text-secondary); font-weight: 400; }
-  .chart-table td { text-align: right; font-variant-numeric: tabular-nums; }
-
-  .bar-tooltip {
-    position: absolute;
-    z-index: 10;
-    background: #0b0b0b;
-    color: #fcfcfb;
-    padding: 0.35rem 0.55rem;
-    border-radius: 0.4rem;
-    font-size: 0.8rem;
-    line-height: 1.3;
-    pointer-events: none;
-    white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-  }
-</style>
+<title>altfolio — your WoW journey</title>
+<meta name="description" content="Sign in with Battle.net and see your World of Warcraft history rebuilt as a scrollable recap, ending in a verdict on who you've been all along." />
+<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <h1>altfolio</h1>
+  <header class="topbar">
+    <span class="wordmark">altfolio</span>
+    <button id="logout-btn" class="btn btn-quiet" hidden>Sign out</button>
+  </header>
 
-  <section>
-    <h2>Redirect URI</h2>
-    <p>Register this exact URL as the redirect URI on your OAuth client:</p>
-    <pre id="redirect-uri"></pre>
-  </section>
+  <main>
+    <p id="error" class="error" hidden></p>
 
-  <section>
-    <h2>Sign in</h2>
-    <button id="login-btn">Sign in with Battle.net</button>
-    <button id="logout-btn" hidden>Sign out</button>
-    <pre id="status">Not signed in.</pre>
-  </section>
+    <section id="landing" class="chapter is-visible">
+      <div class="chapter-inner">
+        <p class="chapter-eyebrow">Your WoW journey</p>
+        <h1 class="chapter-headline">Every alt you ever abandoned is still on the record.</h1>
+        <p class="chapter-lede">
+          Sign in with Battle.net and altfolio rebuilds your time in Azeroth from what the game
+          still remembers — factions, races, classes, and the years each character was alive —
+          then tells you who you've been all along.
+        </p>
+        <div class="landing-actions">
+          <button id="login-btn" class="btn btn-primary">Sign in with Battle.net</button>
+        </div>
+        <p class="landing-note">
+          Read-only. altfolio asks for the <code>wow.profile</code> scope and nothing else, and your
+          access token never leaves this browser tab.
+        </p>
+        <details class="landing-setup">
+          <summary>Running your own copy?</summary>
+          <p>Register this exact URL as the redirect URI on your Battle.net OAuth client:</p>
+          <pre id="redirect-uri"></pre>
+        </details>
+      </div>
+    </section>
 
-  <section id="stats-section" hidden>
-    <h2>Your characters</h2>
-    <div id="kpi-row" class="kpi-row"></div>
-    <div id="stats">
-      <div id="faction-chart"></div>
-      <div id="race-chart"></div>
-      <div id="class-chart"></div>
-      <div id="activity-chart"></div>
-      <div id="peaks-chart"></div>
-    </div>
-  </section>
+    <section id="loading" class="chapter is-visible" hidden>
+      <div class="chapter-inner">
+        <p class="chapter-eyebrow">Working</p>
+        <h2 class="chapter-headline">Rebuilding your journey…</h2>
+        <p class="chapter-lede">
+          Achievement history is one request per character, so a big roster takes a moment.
+        </p>
+        <ol id="load-steps" class="load-steps"></ol>
+      </div>
+    </section>
+
+    <div id="journey" hidden></div>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      Data via <strong>Blizzard Entertainment</strong>. altfolio is a non-commercial fan project,
+      not affiliated with or endorsed by Blizzard.
+    </p>
+  </footer>
 
   <script src="oauth-config.js"></script>
   <script src="oauth.js"></script>
+  <script src="api.js"></script>
   <script src="profile.js"></script>
   <script src="activity.js"></script>
+  <script src="journey.js"></script>
   <script src="charts.js"></script>
-  <script>
-    document.getElementById("redirect-uri").textContent = window.OAUTH_CONFIG.redirectUri;
-
-    const statusEl = document.getElementById("status");
-    const loginBtn = document.getElementById("login-btn");
-    const logoutBtn = document.getElementById("logout-btn");
-
-    const statsSection = document.getElementById("stats-section");
-
-    loginBtn.addEventListener("click", () => BnetAuth.login());
-    logoutBtn.addEventListener("click", () => {
-      BnetAuth.logout();
-      statsSection.hidden = true;
-      render();
-    });
-
-    function render() {
-      const token = BnetAuth.getAccessToken();
-      loginBtn.hidden = !!token;
-      logoutBtn.hidden = !token;
-      if (token) {
-        statusEl.textContent = "Signed in.";
-        statusEl.classList.remove("error");
-      } else if (!statusEl.classList.contains("error")) {
-        statusEl.textContent = "Not signed in.";
-      }
-    }
-
-    async function loadStats() {
-      const token = BnetAuth.getAccessToken();
-      if (!token) return;
-
-      statsSection.hidden = false;
-      try {
-        const characters = await BnetProfile.fetchCharacters(token);
-        const factions = BnetProfile.countBy(characters, "faction");
-        const races = BnetProfile.countBy(characters, "race");
-        const classes = BnetProfile.countBy(characters, "class");
-        const levels = characters.map((c) => c.level).filter((l) => typeof l === "number");
-        const maxLevel = levels.length ? Math.max(...levels) : null;
-
-        const kpis = [{ label: "Characters", value: String(characters.length) }];
-        if (maxLevel !== null) kpis.push({ label: "Highest level", value: String(maxLevel) });
-        if (factions[0]) kpis.push({ label: "Top faction", value: factions[0].label, sub: `${factions[0].count} characters` });
-        if (classes[0]) kpis.push({ label: "Top class", value: classes[0].label, sub: `${classes[0].count} characters` });
-        BnetCharts.renderKpiRow(document.getElementById("kpi-row"), kpis);
-
-        BnetCharts.renderBarChart(document.getElementById("faction-chart"), "Faction", factions);
-        BnetCharts.renderBarChart(document.getElementById("race-chart"), "Race", races);
-        BnetCharts.renderBarChart(document.getElementById("class-chart"), "Class", classes);
-
-        // Achievement history is a separate, slower fetch (one request per
-        // character); keep a failure here from taking down the charts above.
-        try {
-          const activity = await BnetActivity.fetchActivity(token, characters);
-          BnetCharts.renderBarChart(
-            document.getElementById("activity-chart"),
-            "Activity over time",
-            BnetActivity.monthlyTotals(activity.entries),
-            "achievements"
-          );
-          BnetCharts.renderBarChart(
-            document.getElementById("peaks-chart"),
-            "Busiest month per character",
-            BnetActivity.peakMonthPerCharacter(activity.entries),
-            "achievements"
-          );
-
-          const earliest = BnetActivity.earliestActivity(activity.entries);
-          let oldestCharacter = null;
-          let oldestTimestamp = Infinity;
-          for (const [name, timestamp] of earliest) {
-            if (timestamp < oldestTimestamp) {
-              oldestTimestamp = timestamp;
-              oldestCharacter = name;
-            }
-          }
-          if (oldestCharacter) {
-            const since = new Date(oldestTimestamp).toLocaleDateString(undefined, { year: "numeric", month: "short" });
-            kpis.push({ label: "Active since (earliest seen)", value: oldestCharacter, sub: since });
-            BnetCharts.renderKpiRow(document.getElementById("kpi-row"), kpis);
-          }
-        } catch (err) {
-          document.getElementById("activity-chart").hidden = true;
-          document.getElementById("peaks-chart").hidden = true;
-          console.warn("Activity history unavailable:", err.message);
-        }
-      } catch (err) {
-        statsSection.hidden = true;
-        statusEl.textContent = err.message;
-        statusEl.classList.add("error");
-      }
-    }
-
-    (async () => {
-      const result = BnetAuth.parseCallback();
-      if (result && result.error) {
-        statusEl.textContent = result.error;
-        statusEl.classList.add("error");
-      } else if (result && result.code) {
-        statusEl.textContent = "Exchanging code for a token…";
-        try {
-          await BnetAuth.exchangeCode(result.code);
-        } catch (err) {
-          statusEl.textContent = err.message;
-          statusEl.classList.add("error");
-        }
-      }
-      render();
-      await loadStats();
-    })();
-  </script>
+  <script src="share-card.js"></script>
+  <script src="journey-ui.js"></script>
+  <script src="main.js"></script>
 </body>
 </html>

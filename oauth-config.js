@@ -9,5 +9,6 @@ window.OAUTH_CONFIG = {
   // "https://altfolio-oauth.<subdomain>.workers.dev"
   tokenEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/token",
   profileEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/profile",
+  characterEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/character",
   achievementsEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/achievements",
 };
