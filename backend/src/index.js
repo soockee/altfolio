@@ -5,7 +5,7 @@
 // and neither Battle.net's token endpoint nor api.blizzard.com send CORS
 // headers for browser calls.
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const cors = {
       "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN,
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -30,8 +30,9 @@ export default {
         return proxy(request, env, cors, "/profile/user/wow");
       }
 
-      // Both per-character reads take the same realm/character pair.
-      if (url.pathname === "/character" || url.pathname === "/achievements") {
+      // All three take the same realm/character pair and differ only in
+      // which profile sub-resource they read.
+      if (url.pathname === "/character" || url.pathname === "/achievements" || url.pathname === "/media/character") {
         const realm = url.searchParams.get("realm");
         const character = url.searchParams.get("character");
         if (!realm || !character) {
@@ -43,8 +44,20 @@ export default {
         // achievements summary carries a `completed_timestamp` per
         // achievement — the closest thing to a history the API exposes,
         // since there is no playtime or character-creation-date endpoint.
+        // character-media carries the Armory portrait renders — see
+        // docs/wow-art-resources.md for why these are fetched live rather
+        // than bundled.
         const base = `/profile/wow/character/${encodeURIComponent(realm.toLowerCase())}/${encodeURIComponent(character.toLowerCase())}`;
-        return proxy(request, env, cors, url.pathname === "/achievements" ? `${base}/achievements` : base);
+        const suffix = { "/achievements": "/achievements", "/media/character": "/character-media" }[url.pathname] || "";
+        return proxy(request, env, cors, `${base}${suffix}`);
+      }
+
+      // Class icons are public Game Data, not any one player's profile, so
+      // this authenticates as the app itself (client-credentials) rather
+      // than forwarding the caller's bearer token, and caches the result at
+      // the edge since the artwork never changes.
+      if (url.pathname === "/media/class") {
+        return handleClassMedia(request, env, cors, ctx);
       }
     }
 
@@ -109,4 +122,66 @@ async function proxy(request, env, cors, apiPath) {
     status: apiRes.status,
     headers: { ...cors, "Content-Type": "application/json" },
   });
+}
+
+// Client-credentials app token, memoized in module scope for the isolate's
+// lifetime. Game Data reads like class icons aren't tied to any one player,
+// so the Worker authenticates as itself here instead of forwarding a user's
+// bearer token — the same CLIENT_ID/CLIENT_SECRET used for the code exchange
+// in handleToken, just a different grant_type and no redirect_uri.
+let appToken = null;
+let appTokenExpiry = 0;
+
+async function getAppToken(env) {
+  if (appToken && Date.now() < appTokenExpiry) return appToken;
+
+  const basicAuth = btoa(`${env.CLIENT_ID}:${env.CLIENT_SECRET}`);
+  const res = await fetch(`https://${env.REGION}.battle.net/oauth/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${basicAuth}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: "grant_type=client_credentials",
+  });
+  if (!res.ok) throw new Error(`App token request failed: ${res.status}`);
+
+  const body = await res.json();
+  appToken = body.access_token;
+  // Refresh a minute early so an in-flight request never races expiry.
+  appTokenExpiry = Date.now() + (body.expires_in - 60) * 1000;
+  return appToken;
+}
+
+// Proxies the WoW Game Data media endpoint for a playable class's icon
+// (?id=<classId>, e.g. 1 = Warrior). Static data namespace, not profile —
+// this is the same artwork for every player, which is also why it's safe to
+// cache at the edge for a day.
+async function handleClassMedia(request, env, cors, ctx) {
+  const id = new URL(request.url).searchParams.get("id");
+  if (!id || !/^\d+$/.test(id)) {
+    return new Response("Missing or invalid id", { status: 400, headers: cors });
+  }
+
+  const cache = caches.default;
+  const cacheKey = new Request(request.url, request);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
+  let token;
+  try {
+    token = await getAppToken(env);
+  } catch (err) {
+    return new Response(err.message, { status: 502, headers: cors });
+  }
+
+  const apiUrl = `https://${env.REGION}.api.blizzard.com/data/wow/media/playable-class/${id}?namespace=static-${env.REGION}&locale=en_US`;
+  const apiRes = await fetch(apiUrl, { headers: { Authorization: `Bearer ${token}` } });
+
+  const response = new Response(await apiRes.text(), {
+    status: apiRes.status,
+    headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=86400" },
+  });
+  if (apiRes.ok) ctx.waitUntil(cache.put(cacheKey, response.clone()));
+  return response;
 }

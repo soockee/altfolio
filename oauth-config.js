@@ -11,4 +11,6 @@ window.OAUTH_CONFIG = {
   profileEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/profile",
   characterEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/character",
   achievementsEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/achievements",
+  classMediaEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/media/class",
+  characterMediaEndpoint: "https://altfolio-oauth.gamingsockee.workers.dev/media/character",
 };

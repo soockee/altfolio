@@ -120,7 +120,7 @@
     const journey = window.BnetJourney.build({ characters, activity, lastLogins });
     setStep("verdict", "done", journey.verdict.title);
 
-    window.BnetJourneyUI.render(els.journey, journey, activity);
+    window.BnetJourneyUI.render(els.journey, journey, activity, token);
     show("journey");
     window.scrollTo({ top: 0 });
   }

@@ -41,6 +41,33 @@
     return el("p", "chapter-callout", text);
   }
 
+  // A callout paired with a character's portrait — for the one or two
+  // moments the recap names a specific character rather than a statistic.
+  // The portrait is best-effort: `character-media` can 404 for a very old or
+  // very low-level character, and the frame just stays empty when it does,
+  // same fade-in-or-nothing treatment as every other icon in the journey.
+  function spotlight(character, text, token) {
+    const wrap = el("div", "spotlight");
+    const portrait = el("span", "wow-icon spotlight-portrait");
+    wrap.append(portrait, el("p", "spotlight-text", text));
+
+    if (token) {
+      window.BnetMedia.characterMedia(token, character).then((media) => {
+        const src = media && (media.avatar || media.main);
+        if (!src) return;
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = `${character.name}, a ${character.race} ${character.class}`;
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.onerror = () => img.remove();
+        portrait.appendChild(img);
+      });
+    }
+
+    return wrap;
+  }
+
   // --- chapters -------------------------------------------------------------
 
   function coldOpen(journey) {
@@ -136,7 +163,7 @@
     return section;
   }
 
-  function racesChapter(journey) {
+  function racesChapter(journey, token) {
     const r = journey.races;
     const total = journey.totals.characters;
 
@@ -164,8 +191,10 @@
     if (r.firstCharacter) {
       const c = r.firstCharacter.character;
       body.appendChild(
-        callout(
-          `The first traces of you in Azeroth are ${c.name}, a ${c.race} ${c.class} on ${c.realm}, back in ${monthYear(r.firstCharacter.firstSeen)}.`
+        spotlight(
+          c,
+          `The first traces of you in Azeroth are ${c.name}, a ${c.race} ${c.class} on ${c.realm}, back in ${monthYear(r.firstCharacter.firstSeen)}.`,
+          token
         )
       );
     }
@@ -195,6 +224,14 @@
 
     const { section, body } = chapter("chapter-classes", "Chapter three · Classes", headline, lede);
 
+    // Class name -> id, so the bar chart can resolve each row's icon. One
+    // exemplar per name is enough; every character of a given class shares
+    // the same icon.
+    const classIdByName = new Map();
+    for (const ch of journey.characters) {
+      if (ch.class && ch.classId && !classIdByName.has(ch.class)) classIdByName.set(ch.class, ch.classId);
+    }
+
     const viz = el("div");
     body.appendChild(viz);
     // When there is a clear favourite the story is "this one is the point"
@@ -203,6 +240,7 @@
     // three equal bars would assert a favourite the data doesn't show.
     window.BnetCharts.renderBarChart(viz, "Class", c.counts, {
       emphasis: c.topIsUnique ? c.top.label : null,
+      icon: (label) => window.BnetMedia.classIcon(classIdByName.get(label)),
     });
 
     if (c.least && c.counts.length > 2) {
@@ -373,9 +411,23 @@
       const th = el("th", null, c.name);
       th.scope = "row";
       tr.appendChild(th);
-      for (const value of [c.realm, c.level, c.race, c.class, c.faction]) {
+      for (const value of [c.realm, c.level, c.race]) {
         tr.appendChild(el("td", null, value === undefined || value === null ? "—" : String(value)));
       }
+
+      const classTd = el("td");
+      if (c.class) {
+        const inline = el("span", "roster-class-inline");
+        const iconSlot = el("span", "wow-icon roster-class-icon");
+        inline.append(iconSlot, document.createTextNode(c.class));
+        classTd.appendChild(inline);
+        window.BnetCharts.fillIcon(iconSlot, () => window.BnetMedia.classIcon(c.classId));
+      } else {
+        classTd.textContent = "—";
+      }
+      tr.appendChild(classTd);
+
+      tr.appendChild(el("td", null, c.faction === undefined || c.faction === null ? "—" : String(c.faction)));
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -431,11 +483,11 @@
     for (const c of chapters) observer.observe(c);
   }
 
-  function render(container, journey, activity) {
+  function render(container, journey, activity, token) {
     container.replaceChildren();
     container.appendChild(coldOpen(journey));
     container.appendChild(factionsChapter(journey));
-    container.appendChild(racesChapter(journey));
+    container.appendChild(racesChapter(journey, token));
     container.appendChild(classesChapter(journey));
     if (journey.hasHistory) container.appendChild(timelineChapter(journey));
     container.appendChild(verdictChapter(journey));

@@ -167,9 +167,29 @@
     }
   }
 
+  // Resolves `iconFn(label)` (if given) and drops the result into `slot` once
+  // it lands. Used for the optional leading icon on a bar row — resolution is
+  // async and best-effort, so the row already looks complete without it; the
+  // icon just fades in on top when (and if) it arrives.
+  function fillIcon(slot, iconFn, label) {
+    Promise.resolve(iconFn(label)).then((url) => {
+      if (!url) return;
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "";
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.onerror = () => img.remove();
+      slot.appendChild(img);
+    });
+  }
+
   // data: [{ label, count }, ...] — renders into `container`, replacing its contents.
   // options.unit names what each count measures (default "characters").
   // options.emphasis is a label to highlight; every other bar goes gray.
+  // options.icon, if given, is (label) => url | Promise<url|null> — a small
+  // decorative icon rendered before the label; resolved best-effort, see
+  // fillIcon above.
   function renderBarChart(container, title, data, options = {}) {
     const unit = options.unit || "characters";
     const total = data.reduce((sum, d) => sum + d.count, 0);
@@ -197,7 +217,19 @@
 
       const labelEl = document.createElement("span");
       labelEl.className = "bar-label";
-      labelEl.textContent = label;
+
+      if (options.icon) {
+        labelEl.classList.add("bar-label-iconed");
+        const iconSlot = document.createElement("span");
+        iconSlot.className = "wow-icon bar-icon";
+        const text = document.createElement("span");
+        text.className = "bar-label-text";
+        text.textContent = label;
+        labelEl.append(iconSlot, text);
+        fillIcon(iconSlot, options.icon, label);
+      } else {
+        labelEl.textContent = label;
+      }
 
       const track = document.createElement("div");
       track.className = "bar-track";
@@ -581,5 +613,5 @@
     addTableToggle(header, chartWrap, table);
   }
 
-  window.BnetCharts = { renderKpiRow, renderBarChart, renderTugOfWar, renderTimeSeries, renderTimeline };
+  window.BnetCharts = { renderKpiRow, renderBarChart, renderTugOfWar, renderTimeSeries, renderTimeline, fillIcon };
 })();

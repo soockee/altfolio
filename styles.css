@@ -507,6 +507,54 @@ pre {
 .roster-table { margin-top: 0.75rem; }
 .roster-table td { text-align: left; }
 
+/* --- WoW art: class icons & character portraits ----------------------------
+   Fetched live from Blizzard's media endpoints via the Worker, never bundled
+   — see docs/wow-art-resources.md. Resolution is async and best-effort, so
+   every element here has a defined "nothing arrived yet" state: an icon slot
+   stays empty (never a broken-image glyph — the <img> is only added once a
+   URL actually resolves) and a portrait frame stays a plain tinted circle. A
+   resolved image fades in rather than popping in, the same treatment used
+   for every progressive-enhancement image in the journey. */
+
+.wow-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 3px;
+  opacity: 0;
+  animation: wow-icon-in 0.25s ease forwards;
+}
+@keyframes wow-icon-in {
+  to { opacity: 1; }
+}
+
+.bar-label-iconed { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.bar-icon { flex: none; width: 18px; height: 18px; }
+.bar-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.roster-class-inline { display: inline-flex; align-items: center; gap: 0.4rem; }
+.roster-class-icon { flex: none; width: 16px; height: 16px; }
+
+.spotlight {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--series-1);
+}
+.spotlight-portrait {
+  flex: none;
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.spotlight-portrait img { width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
+.spotlight-text { margin: 0; color: var(--text-secondary); font-size: 0.95rem; }
+
 /* --- bar chart ------------------------------------------------------------ */
 
 .chart-rows { display: flex; flex-direction: column; gap: 4px; }

@@ -1,6 +1,6 @@
 # backend
 
-Cloudflare Worker with four routes:
+Cloudflare Worker with six routes:
 
 - `POST /token` — exchanges a Battle.net authorization `code` for an
   access token. Needs `client_secret`, which can't live in the static
@@ -19,10 +19,26 @@ Cloudflare Worker with four routes:
   `completed_timestamp` on each achievement — there's no playtime or
   character-creation-date endpoint in the Battle.net API, so this is the
   closest available signal.
+- `GET /media/character?realm=<slug>&character=<name>` — proxies the same
+  character's `character-media` sub-resource (Armory portrait renders).
+  Same auth story as the two routes above: forwards the caller's own
+  `wow.profile`-scoped bearer token.
+- `GET /media/class?id=<classId>` — proxies the Game Data API's class icon
+  (`/data/wow/media/playable-class/{id}`). Different from every other route
+  here: this is public static data, not tied to any player, so the Worker
+  mints and forwards its **own** `client_credentials` app token instead of
+  the caller's, and caches successful responses at Cloudflare's edge for a
+  day (`caches.default`, in `handleClassMedia`) since the artwork never
+  changes.
 
-The three `GET` routes share one `proxy()` helper: they differ only in the
-API path. None of them inspects or stores the caller's token — the Worker
-exists purely because `api.blizzard.com` sends no CORS headers.
+The five `GET /profile`-namespace routes share one `proxy()` helper: they
+differ only in the API path, and none of them inspects or stores the
+caller's token — the Worker exists purely because `api.blizzard.com` sends
+no CORS headers. `/media/class` can't reuse `proxy()`: it needs the
+`static-<region>` namespace and the app's own token rather than the
+caller's, so it's handled by `handleClassMedia` instead. See
+[../docs/wow-art-resources.md](../docs/wow-art-resources.md) for why these
+two media routes exist and how the frontend uses them.
 
 There is no account-wide achievements endpoint to proxy. Account-wide
 achievements surface through the per-character summary instead, reporting an

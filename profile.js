@@ -21,6 +21,7 @@
           realmSlug,
           level: c.level,
           class: c.playable_class && c.playable_class.name,
+          classId: c.playable_class && c.playable_class.id,
           race: c.playable_race && c.playable_race.name,
           faction: c.faction && c.faction.name,
         });
