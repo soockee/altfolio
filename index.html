@@ -16,22 +16,40 @@
   <main>
     <p id="error" class="error" hidden></p>
 
-    <section id="landing" class="chapter is-visible">
-      <div class="chapter-inner">
-        <p class="chapter-eyebrow">Your WoW journey</p>
-        <h1 class="chapter-headline">Every alt you ever abandoned is still on the record.</h1>
-        <p class="chapter-lede">
+    <section id="landing" class="hero-landing">
+      <div class="hero-orbs" aria-hidden="true">
+        <span class="hero-orb hero-orb-a"></span>
+        <span class="hero-orb hero-orb-h"></span>
+      </div>
+
+      <div class="hero-inner">
+        <p class="hero-eyebrow">Your WoW Journey</p>
+        <h1 class="hero-headline">Every alt you ever abandoned is still on the record.</h1>
+        <p class="hero-lede">
           Sign in with Battle.net and altfolio rebuilds your time in Azeroth from what the game
-          still remembers — factions, races, classes, and the years each character was alive —
-          then tells you who you've been all along.
+          still remembers, then tells you who you've been all along.
         </p>
-        <div class="landing-actions">
-          <button id="login-btn" class="btn btn-primary">Sign in with Battle.net</button>
+
+        <p class="sr-only" id="hero-preview-label">Inside this recap</p>
+        <ul class="hero-preview" aria-labelledby="hero-preview-label">
+          <li>Factions</li>
+          <li>Races</li>
+          <li>Classes</li>
+          <li>Timeline</li>
+          <li>Verdict</li>
+        </ul>
+
+        <div class="hero-actions">
+          <button id="login-btn" class="btn-cta" type="button">
+            Begin Journey
+            <span class="btn-cta-arrow" aria-hidden="true">→</span>
+          </button>
+          <p class="hero-caption">
+            Signs in with Battle.net · read-only <code>wow.profile</code> scope · your token never leaves
+            this tab
+          </p>
         </div>
-        <p class="landing-note">
-          Read-only. altfolio asks for the <code>wow.profile</code> scope and nothing else, and your
-          access token never leaves this browser tab.
-        </p>
+
         <details class="landing-setup">
           <summary>Running your own copy?</summary>
           <p>Register this exact URL as the redirect URI on your Battle.net OAuth client:</p>
