@@ -1,0 +1,11 @@
+{
+  "name": "altfolio-oauth",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-15",
+  "vars": {
+    "CLIENT_ID": "YOUR_CLIENT_ID",
+    "REGION": "us",
+    "REDIRECT_URI": "https://soockee.github.io/altfolio/",
+    "ALLOWED_ORIGIN": "https://soockee.github.io"
+  }
+}

@@ -1,11 +1,11 @@
-// Battle.net OAuth "Authorization Code" flow — browser-side half only.
+// Battle.net OAuth "Authorization Code" flow.
 //
-// Battle.net's token endpoint requires a client_secret and does not send
-// CORS headers, so the code -> token exchange cannot happen here. This
-// handles step 1 (redirect to Battle.net, get back an authorization code)
-// and leaves the exchange to a server-side component added later.
+// The redirect and callback happen here in the browser. The code -> token
+// exchange is delegated to the backend/ Worker, since it requires
+// client_secret and Battle.net's token endpoint doesn't send CORS headers.
 (function () {
   const STATE_KEY = "bnet_oauth_state";
+  const TOKEN_KEY = "bnet_access_token";
 
   function randomState() {
     const bytes = new Uint8Array(16);
@@ -53,5 +53,30 @@
     return { code };
   }
 
-  window.BnetAuth = { login, parseCallback };
+  async function exchangeCode(code) {
+    const cfg = window.OAUTH_CONFIG;
+    const res = await fetch(cfg.tokenEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+
+    const tokens = await res.json();
+    if (!res.ok) {
+      throw new Error(tokens.error_description || tokens.error || "Token exchange failed");
+    }
+
+    sessionStorage.setItem(TOKEN_KEY, tokens.access_token);
+    return tokens;
+  }
+
+  function getAccessToken() {
+    return sessionStorage.getItem(TOKEN_KEY);
+  }
+
+  function logout() {
+    sessionStorage.removeItem(TOKEN_KEY);
+  }
+
+  window.BnetAuth = { login, logout, parseCallback, exchangeCode, getAccessToken };
 })();

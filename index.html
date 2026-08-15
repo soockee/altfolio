@@ -41,6 +41,7 @@
   <section>
     <h2>Sign in</h2>
     <button id="login-btn">Sign in with Battle.net</button>
+    <button id="logout-btn" hidden>Sign out</button>
     <pre id="status">Not signed in.</pre>
   </section>
 
@@ -48,20 +49,45 @@
   <script src="oauth.js"></script>
   <script>
     document.getElementById("redirect-uri").textContent = window.OAUTH_CONFIG.redirectUri;
-    document.getElementById("login-btn").addEventListener("click", () => BnetAuth.login());
 
     const statusEl = document.getElementById("status");
-    const result = BnetAuth.parseCallback();
-    if (result && result.error) {
-      statusEl.textContent = result.error;
-      statusEl.classList.add("error");
-    } else if (result && result.code) {
-      statusEl.textContent =
-        "Received authorization code:\n" + result.code +
-        "\n\nExchanging this for a token requires a server-side call " +
-        "(client_secret + Battle.net's token endpoint doesn't allow " +
-        "browser CORS) — not implemented yet.";
+    const loginBtn = document.getElementById("login-btn");
+    const logoutBtn = document.getElementById("logout-btn");
+
+    loginBtn.addEventListener("click", () => BnetAuth.login());
+    logoutBtn.addEventListener("click", () => {
+      BnetAuth.logout();
+      render();
+    });
+
+    function render() {
+      const token = BnetAuth.getAccessToken();
+      loginBtn.hidden = !!token;
+      logoutBtn.hidden = !token;
+      if (token) {
+        statusEl.textContent = "Signed in.\naccess_token: " + token;
+        statusEl.classList.remove("error");
+      } else if (!statusEl.classList.contains("error")) {
+        statusEl.textContent = "Not signed in.";
+      }
     }
+
+    (async () => {
+      const result = BnetAuth.parseCallback();
+      if (result && result.error) {
+        statusEl.textContent = result.error;
+        statusEl.classList.add("error");
+      } else if (result && result.code) {
+        statusEl.textContent = "Exchanging code for a token…";
+        try {
+          await BnetAuth.exchangeCode(result.code);
+        } catch (err) {
+          statusEl.textContent = err.message;
+          statusEl.classList.add("error");
+        }
+      }
+      render();
+    })();
   </script>
 </body>
 </html>
