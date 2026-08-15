@@ -26,6 +26,10 @@ export default {
       return handleProfile(request, env, cors);
     }
 
+    if (request.method === "GET" && url.pathname === "/achievements") {
+      return handleAchievements(request, env, cors);
+    }
+
     return new Response("Not found", { status: 404, headers: cors });
   },
 };
@@ -80,6 +84,33 @@ async function handleProfile(request, env, cors) {
   }
 
   const apiUrl = `https://${env.REGION}.api.blizzard.com/profile/user/wow?namespace=profile-${env.REGION}&locale=en_US`;
+  const apiRes = await fetch(apiUrl, { headers: { Authorization: auth } });
+
+  return new Response(await apiRes.text(), {
+    status: apiRes.status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
+}
+
+// Proxies the WoW Character Achievements Summary — every achievement a
+// character has completed, each with a completed_timestamp. This is the
+// only place the Battle.net API exposes anything historical; there's no
+// playtime or character-creation-date endpoint. Requires the `wow.profile`
+// OAuth scope, same as /profile.
+async function handleAchievements(request, env, cors) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!auth.startsWith("Bearer ")) {
+    return new Response("Missing bearer token", { status: 401, headers: cors });
+  }
+
+  const url = new URL(request.url);
+  const realm = url.searchParams.get("realm");
+  const character = url.searchParams.get("character");
+  if (!realm || !character) {
+    return new Response("Missing realm or character", { status: 400, headers: cors });
+  }
+
+  const apiUrl = `https://${env.REGION}.api.blizzard.com/profile/wow/character/${encodeURIComponent(realm.toLowerCase())}/${encodeURIComponent(character.toLowerCase())}/achievements?namespace=profile-${env.REGION}&locale=en_US`;
   const apiRes = await fetch(apiUrl, { headers: { Authorization: auth } });
 
   return new Response(await apiRes.text(), {

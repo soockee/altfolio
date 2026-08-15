@@ -21,6 +21,7 @@
         characters.push({
           name: c.name,
           realm: c.realm && c.realm.name,
+          realmSlug: c.realm && c.realm.slug,
           level: c.level,
           class: c.playable_class && c.playable_class.name,
           race: c.playable_race && c.playable_race.name,

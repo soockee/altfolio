@@ -68,11 +68,14 @@
   }
 
   // data: [{ label, count }, ...] — renders into `container`, replacing its contents.
-  function renderBarChart(container, title, data) {
+  // unit names what each count measures (defaults to "characters" for the
+  // faction/race/class breakdowns); pass e.g. "achievements" for other data.
+  function renderBarChart(container, title, data, unit = "characters") {
     container.classList.add("viz-root", "chart-card");
     container.replaceChildren();
 
     const total = data.reduce((sum, d) => sum + d.count, 0);
+    const singularUnit = unit.endsWith("s") ? unit.slice(0, -1) : unit;
 
     const header = document.createElement("div");
     header.className = "chart-header";
@@ -83,7 +86,7 @@
     titleEl.textContent = title;
     const subEl = document.createElement("p");
     subEl.className = "chart-subtitle";
-    subEl.textContent = total === 1 ? "1 character" : `${total} characters`;
+    subEl.textContent = total === 1 ? `1 ${singularUnit}` : `${total} ${unit}`;
     heading.append(titleEl, subEl);
     header.appendChild(heading);
 

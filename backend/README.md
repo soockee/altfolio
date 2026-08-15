@@ -9,6 +9,12 @@ Cloudflare Worker with two routes:
   (`api.blizzard.com`) using the caller's `Authorization: Bearer` header.
   Exists because that endpoint doesn't send CORS headers, so the browser
   can't call it directly.
+- `GET /achievements?realm=<slug>&character=<name>` — proxies the WoW
+  Character Achievements Summary for one character, same CORS reason as
+  `/profile`. The frontend calls this once per character and reconstructs
+  an activity-over-time view from the `completed_timestamp` on each
+  achievement — there's no playtime or history endpoint in the Battle.net
+  API, so this is the closest available signal.
 
 ## Setup
 
