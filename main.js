@@ -11,6 +11,11 @@
 (function () {
   const fmt = new Intl.NumberFormat();
   const stage = window.BnetStage;
+  // Optional by design, so a stand-in keeps an absent or failed audio.js from
+  // taking the recap down with it — unlike the stage, nothing here is load-bearing.
+  const audio = window.BnetAudio || {
+    mount() {}, cue() {}, intensity() {}, stop() {}, rewind() {}, enabled: () => false,
+  };
 
   const els = {
     landing: document.getElementById("landing"),
@@ -19,6 +24,8 @@
     error: document.getElementById("error"),
     login: document.getElementById("login-btn"),
     logout: document.getElementById("logout-btn"),
+    sound: document.getElementById("sound-btn"),
+    soundHint: document.getElementById("sound-hint"),
   };
 
   // Share of the total wait each phase is worth. Achievement history is by far
@@ -34,9 +41,24 @@
     verdict: [0.95, 1],
   };
 
-  function at(phase, fraction = 1) {
-    const [from, to] = SPAN[phase];
-    stage.progress(from + (to - from) * Math.max(0, Math.min(1, fraction)));
+  // Screen and score are told the same thing at the same time, from here.
+  // Neither module knows about the other; this file is the only place that
+  // knows a phase changed, so it is the only place either of them hears it.
+  function at(id, fraction = 1) {
+    const [from, to] = SPAN[id];
+    const overall = from + (to - from) * Math.max(0, Math.min(1, fraction));
+    stage.progress(overall);
+    audio.intensity(overall);
+  }
+
+  function phase(id) {
+    stage.phase(id);
+    audio.cue("phase", id);
+  }
+
+  function spot(character) {
+    stage.spot(character);
+    audio.cue("spot");
   }
 
   const monthYear = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
@@ -117,7 +139,7 @@
     show("loading");
 
     // --- roster ---
-    stage.phase("characters");
+    phase("characters");
     at("characters", 0);
 
     let characters;
@@ -140,7 +162,7 @@
     const datable = characters.filter((c) => c.realmSlug).length;
 
     // --- last-played dates ---
-    stage.phase("detail");
+    phase("detail");
     at("detail", 0);
 
     let lastLogins = new Map();
@@ -149,7 +171,7 @@
       lastLogins = await window.BnetProfile.fetchLastLogins(token, characters, (done, total, settled) => {
         at("detail", done / total);
         stage.note(`${fmt.format(done)} of ${fmt.format(total)} characters dated`);
-        if (settled && settled.item) stage.spot(settled.item);
+        if (settled && settled.item) spot(settled.item);
         if (settled && settled.value && typeof settled.value.last_login_timestamp === "number") {
           newestLogin = Math.max(newestLogin, settled.value.last_login_timestamp);
         }
@@ -161,7 +183,7 @@
     }
 
     // --- achievement history ---
-    stage.phase("history");
+    phase("history");
     at("history", 0);
 
     let activity = null;
@@ -172,7 +194,7 @@
       activity = await window.BnetActivity.fetchActivity(token, characters, (done, total, settled) => {
         at("history", done / total);
         stage.note(`${fmt.format(done)} of ${fmt.format(total)} character histories read`);
-        if (settled && settled.item) stage.spot(settled.item);
+        if (settled && settled.item) spot(settled.item);
         if (!settled || !settled.value) return;
 
         read += settled.value.length;
@@ -197,13 +219,14 @@
     }
 
     // --- verdict ---
-    stage.phase("verdict");
+    phase("verdict");
     at("verdict", 0);
 
     const journey = window.BnetJourney.build({ characters, activity, lastLogins });
 
     at("verdict");
     stage.note(journey.verdict.title);
+    audio.cue("arrive");
 
     window.BnetJourneyUI.render(els.journey, journey, activity, token);
 
@@ -228,7 +251,11 @@
     // a second is a button people press twice.
     clearError();
     stage.mount(els.loading);
-    stage.phase("connect");
+    // Undoes the fade-out a previous run's arrival left behind, so signing
+    // out and starting again isn't silent.
+    audio.rewind();
+    audio.cue("begin");
+    phase("connect");
     at("connect", 0.5);
     show("loading");
 
@@ -241,9 +268,11 @@
     window.BnetAuth.logout();
     els.journey.replaceChildren();
     clearError();
+    audio.stop();
     show("landing");
   });
 
+  audio.mount(els.sound, els.soundHint);
   document.getElementById("redirect-uri").textContent = window.OAUTH_CONFIG.redirectUri;
 
   (async () => {
@@ -256,7 +285,7 @@
     if (result && result.code) {
       show("loading");
       stage.mount(els.loading);
-      stage.phase("connect");
+      phase("connect");
       at("connect", 0.5);
       try {
         await window.BnetAuth.exchangeCode(result.code);

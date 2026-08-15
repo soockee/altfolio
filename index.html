@@ -33,7 +33,22 @@
 <body>
   <header class="topbar">
     <span class="wordmark">altfolio</span>
-    <button id="logout-btn" class="btn btn-quiet" hidden>Sign out</button>
+    <div class="topbar-actions">
+      <!-- Unhidden by audio.js, and only where Web Audio exists. Shipping it
+           hidden means a browser without it, or a script that failed to load,
+           shows no control rather than a dead one. -->
+      <button id="sound-btn" class="btn btn-quiet btn-sound" type="button" aria-pressed="false" hidden>
+        <svg class="sound-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" />
+          <path class="sound-wave" d="M15.4 9.3a4 4 0 0 1 0 5.4" />
+          <path class="sound-wave" d="M17.9 6.9a7.6 7.6 0 0 1 0 10.2" />
+          <path class="sound-slash" d="M16 10l5 4m0-4l-5 4" />
+        </svg>
+        <span class="sound-label">Sound</span>
+      </button>
+      <button id="logout-btn" class="btn btn-quiet" hidden>Sign out</button>
+    </div>
   </header>
 
   <main>
@@ -71,6 +86,14 @@
             Signs in with Battle.net · read-only <code>wow.profile</code> scope · your token never leaves
             this tab
           </p>
+          <!-- Unhidden by audio.js alongside the toggle. An opt-in nobody knows
+               about is the same as no feature, and the toggle alone is easy to
+               miss up in the corner. -->
+          <p class="hero-sound-hint" id="sound-hint" hidden>
+            <span aria-hidden="true">♪</span>
+            There's a battle cue for the wait, built live from your own data.
+            <button type="button" class="link-btn" id="sound-hint-btn">Turn sound on</button>
+          </p>
         </div>
 
         <details class="landing-setup">
@@ -106,6 +129,7 @@
   <script src="share-card.js"></script>
   <script src="journey-ui.js"></script>
   <script src="stage.js"></script>
+  <script src="audio.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

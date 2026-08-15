@@ -232,6 +232,68 @@ pre {
 
 .btn-quiet { padding: 0.35rem 0.8rem; font-size: 0.85rem; }
 
+/* --- sound toggle --------------------------------------------------------- */
+
+.topbar-actions { display: flex; align-items: center; gap: 0.5rem; }
+
+.btn-sound {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-secondary);
+}
+.btn-sound[aria-pressed="true"] {
+  color: var(--series-1);
+  border-color: color-mix(in srgb, var(--series-1) 45%, transparent);
+}
+
+.sound-icon { width: 1.05rem; height: 1.05rem; flex: none; }
+
+/* State is carried by which glyph is drawn, not by colour alone — the
+   difference between muted and unmuted has to survive a monochrome display and
+   the several kinds of colour blindness that would flatten blue against grey. */
+.btn-sound[aria-pressed="false"] .sound-wave,
+.btn-sound[aria-pressed="true"] .sound-slash { display: none; }
+
+/* Preference is on but the browser hasn't allowed audio to start yet, which
+   only happens on the way back from the Battle.net redirect. It needs to be
+   noticeable — it is asking for a click — without becoming a strobe next to
+   the thing you're actually reading. */
+.btn-sound[data-blocked] {
+  color: var(--horde);
+  border-color: color-mix(in srgb, var(--horde) 45%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn-sound[data-blocked] { animation: sound-nudge 2.4s ease-in-out infinite; }
+}
+@keyframes sound-nudge {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--horde) 40%, transparent); }
+  50% { box-shadow: 0 0 0 0.3rem transparent; }
+}
+
+.hero-sound-hint {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.link-btn {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--series-1);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.link-btn:hover, .link-btn:focus-visible { color: var(--text-primary); }
+
 .sr-only {
   position: absolute;
   width: 1px;
