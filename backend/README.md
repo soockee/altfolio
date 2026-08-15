@@ -1,8 +1,14 @@
 # backend
 
-Cloudflare Worker that exchanges a Battle.net authorization `code` for an
-access token. Exists because that exchange needs `client_secret`, which
-can't live in the static frontend.
+Cloudflare Worker with two routes:
+
+- `POST /token` — exchanges a Battle.net authorization `code` for an
+  access token. Needs `client_secret`, which can't live in the static
+  frontend.
+- `GET /profile` — proxies the WoW Account Profile Summary
+  (`api.blizzard.com`) using the caller's `Authorization: Bearer` header.
+  Exists because that endpoint doesn't send CORS headers, so the browser
+  can't call it directly.
 
 ## Setup
 

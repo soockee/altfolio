@@ -27,6 +27,72 @@
   }
   .error { color: #c0392b; }
   section { margin-top: 2rem; }
+
+  .viz-root {
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --series-1: #2a78d6;
+    --row-hover: color-mix(in srgb, var(--series-1) 10%, transparent);
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --series-1: #3987e5;
+      --row-hover: color-mix(in srgb, var(--series-1) 16%, transparent);
+    }
+  }
+
+  #stats { display: flex; flex-direction: column; gap: 1.75rem; }
+  .chart-title { margin: 0 0 0.5rem; font-size: 0.95rem; color: var(--text-primary); }
+  .chart-rows { display: flex; flex-direction: column; gap: 6px; }
+  .chart-empty { color: var(--text-muted); }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 8rem 1fr 2.5rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 3px 4px;
+    border-radius: 4px;
+    outline: none;
+  }
+  .bar-row:hover, .bar-row:focus-visible { background: var(--row-hover); }
+  .bar-label {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bar-track { height: 14px; }
+  .bar-fill {
+    height: 100%;
+    min-width: 4px;
+    background: var(--series-1);
+    border-radius: 0 4px 4px 0;
+  }
+  .bar-value {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bar-tooltip {
+    position: absolute;
+    z-index: 10;
+    background: #0b0b0b;
+    color: #fcfcfb;
+    padding: 0.35rem 0.55rem;
+    border-radius: 0.3rem;
+    font-size: 0.8rem;
+    line-height: 1.3;
+    pointer-events: none;
+    white-space: nowrap;
+  }
 </style>
 </head>
 <body>
@@ -45,8 +111,19 @@
     <pre id="status">Not signed in.</pre>
   </section>
 
+  <section id="stats-section" hidden>
+    <h2>Your characters</h2>
+    <div id="stats">
+      <div id="faction-chart"></div>
+      <div id="race-chart"></div>
+      <div id="class-chart"></div>
+    </div>
+  </section>
+
   <script src="oauth-config.js"></script>
   <script src="oauth.js"></script>
+  <script src="profile.js"></script>
+  <script src="charts.js"></script>
   <script>
     document.getElementById("redirect-uri").textContent = window.OAUTH_CONFIG.redirectUri;
 
@@ -54,9 +131,12 @@
     const loginBtn = document.getElementById("login-btn");
     const logoutBtn = document.getElementById("logout-btn");
 
+    const statsSection = document.getElementById("stats-section");
+
     loginBtn.addEventListener("click", () => BnetAuth.login());
     logoutBtn.addEventListener("click", () => {
       BnetAuth.logout();
+      statsSection.hidden = true;
       render();
     });
 
@@ -69,6 +149,35 @@
         statusEl.classList.remove("error");
       } else if (!statusEl.classList.contains("error")) {
         statusEl.textContent = "Not signed in.";
+      }
+    }
+
+    async function loadStats() {
+      const token = BnetAuth.getAccessToken();
+      if (!token) return;
+
+      statsSection.hidden = false;
+      try {
+        const characters = await BnetProfile.fetchCharacters(token);
+        BnetCharts.renderBarChart(
+          document.getElementById("faction-chart"),
+          "Faction",
+          BnetProfile.countBy(characters, "faction"),
+        );
+        BnetCharts.renderBarChart(
+          document.getElementById("race-chart"),
+          "Race",
+          BnetProfile.countBy(characters, "race"),
+        );
+        BnetCharts.renderBarChart(
+          document.getElementById("class-chart"),
+          "Class",
+          BnetProfile.countBy(characters, "class"),
+        );
+      } catch (err) {
+        statsSection.hidden = true;
+        statusEl.textContent = err.message;
+        statusEl.classList.add("error");
       }
     }
 
@@ -87,6 +196,7 @@
         }
       }
       render();
+      await loadStats();
     })();
   </script>
 </body>
