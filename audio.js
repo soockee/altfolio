@@ -81,7 +81,7 @@
 
   let button = null;
   let hint = null;
-  let on = false;
+  let on = true;
   let level = 1; // scales everything; dropped to 0 once the recap arrives
 
   let timer = null;
@@ -104,7 +104,7 @@
     try {
       return localStorage.getItem(STORAGE_KEY) === "on";
     } catch (e) {
-      return false; // storage blocked — default off is the safe default anyway
+      return true; // storage blocked — default on now
     }
   }
 
