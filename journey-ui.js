@@ -252,8 +252,20 @@
     return section;
   }
 
-  function timelineChapter(journey) {
-    const { lanes, years, eras } = journey.timeline;
+  function reignRange(reign) {
+    return reign.from === reign.to ? String(reign.from) : `${reign.from}–${reign.to}`;
+  }
+
+  function timelineChapter(journey, token) {
+    const { lanes, years, eras, reigns } = journey.timeline;
+
+    // The character who held the account for the most years, ties broken by
+    // how much they actually earned while holding it.
+    const longestReign = reigns.reduce((best, reign) => {
+      if (!best) return reign;
+      if (reign.years.length !== best.years.length) return reign.years.length > best.years.length ? reign : best;
+      return reign.count > best.count ? reign : best;
+    }, null);
 
     let headline;
     let lede = null;
@@ -267,11 +279,17 @@
       headline = `${years[0]} to ${years[years.length - 1]}, at a glance.`;
       // Eras only exist for years busy enough to have a clear leader, so an
       // account that never had a heavy year gets no "main" claim at all.
-      const distinctMains = new Set(eras.map((e) => e.character.key)).size;
-      if (distinctMains > 1) {
-        lede = `${distinctMains} different characters have been your main at one point or another.`;
-      } else if (distinctMains === 1) {
-        lede = "One character carried every year busy enough to count.";
+      const mainNames = [];
+      for (const reign of reigns) {
+        if (!mainNames.includes(reign.character.name)) mainNames.push(reign.character.name);
+      }
+      if (mainNames.length > 1) {
+        // Named in the order they held the account — the handovers are the
+        // story, and a count alone doesn't tell you who they were.
+        const shown = mainNames.slice(0, 4);
+        lede = `${shown.join(", then ")}${mainNames.length > shown.length ? ", and others" : ""} — your main has changed hands ${mainNames.length - 1} time${mainNames.length === 2 ? "" : "s"}.`;
+      } else if (mainNames.length === 1) {
+        lede = `${mainNames[0]} carried every year busy enough to count.`;
       } else {
         lede = `${lanes.length} characters, none of them ever quite the main.`;
       }
@@ -281,7 +299,19 @@
 
     const viz = el("div");
     body.appendChild(viz);
-    window.BnetCharts.renderTimeline(viz, lanes, years);
+    window.BnetCharts.renderTimeline(viz, lanes, years, { eras, reigns });
+
+    if (longestReign) {
+      const c = longestReign.character;
+      const span = longestReign.years.length;
+      body.appendChild(
+        spotlight(
+          c,
+          `Nobody held it longer than ${c.name}, your ${c.race} ${c.class} on ${c.realm} — main for ${span} year${span === 1 ? "" : "s"} (${reignRange(longestReign)}), ${fmt.format(longestReign.count)} achievements while it lasted.`,
+          token
+        )
+      );
+    }
 
     if (journey.gap && journey.gap.months >= 12) {
       body.appendChild(
@@ -464,18 +494,50 @@
 
   function revealOnScroll(root) {
     const chapters = root.querySelectorAll(".chapter");
-    if (!("IntersectionObserver" in window) || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    // Optional and silent unless the sound toggle is on — see audio.js.
+    const audio = window.BnetAudio;
+
+    // Reduced motion suppresses the reveal animation, not the sound cue — the
+    // two are separate preferences and someone who turned the score on still
+    // wants the chapters to land. So the chapters are shown immediately, but
+    // the observer is still built, and still only fires as each one actually
+    // scrolls into view.
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (still) for (const c of chapters) c.classList.add("is-visible");
+    if (!("IntersectionObserver" in window)) {
       for (const c of chapters) c.classList.add("is-visible");
       return;
     }
 
+    const order = new Map();
+    chapters.forEach((c, i) => order.set(c, i));
+
+    // Nothing is ever unobserved, so chapters keep ringing when you scroll back
+    // up — the page stays responsive in both directions rather than going quiet
+    // the moment you have seen everything once. `inside` is what makes that
+    // safe: the cue fires on the transition into view, not on every callback,
+    // so a chapter sitting on the threshold can't stutter.
+    //
+    // The reveal itself stays one-way. Re-animating text you have already read
+    // on the way back up is motion for its own sake, and re-hiding it would be
+    // worse.
+    const inside = new Set();
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            observer.unobserve(entry.target);
+          const chapter = entry.target;
+          if (!entry.isIntersecting) {
+            inside.delete(chapter);
+            continue;
           }
+          if (!still) chapter.classList.add("is-visible");
+          if (inside.has(chapter)) continue;
+          inside.add(chapter);
+          // Keyed to the chapter's position rather than to arrival order, so
+          // the line rises as you read down, descends as you go back, and
+          // doesn't reshuffle if two cross the threshold in the same frame.
+          if (audio) audio.cue("section", order.get(chapter));
         }
       },
       { threshold: 0.15 }
@@ -489,7 +551,7 @@
     container.appendChild(factionsChapter(journey));
     container.appendChild(racesChapter(journey, token));
     container.appendChild(classesChapter(journey));
-    if (journey.hasHistory) container.appendChild(timelineChapter(journey));
+    if (journey.hasHistory) container.appendChild(timelineChapter(journey, token));
     container.appendChild(verdictChapter(journey));
     container.appendChild(numbersChapter(journey, activity));
     revealOnScroll(container);

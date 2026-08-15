@@ -497,10 +497,63 @@
 
   const HEAT_BINS = 5;
 
+  // The counts that actually landed in each bin, so the scale can be labelled
+  // with numbers rather than with "quieter → busier". Quantile bins have no
+  // fixed edges a reader could guess at, and the ramp deliberately runs
+  // light→dark in light mode and dark→light in dark mode, so the words alone
+  // leave you working out which end of the blue means more.
+  function binRanges(values, binOf) {
+    const ranges = new Array(HEAT_BINS).fill(null);
+    for (const value of new Set(values)) {
+      const bin = binOf(value);
+      if (bin < 0) continue;
+      const range = ranges[bin];
+      if (!range) ranges[bin] = { min: value, max: value };
+      else {
+        range.min = Math.min(range.min, value);
+        range.max = Math.max(range.max, value);
+      }
+    }
+    return ranges;
+  }
+
+  function crownIcon() {
+    const svg = svgEl("svg", { viewBox: "0 0 24 24", class: "crown-glyph", "aria-hidden": "true" });
+    svg.appendChild(svgEl("path", { d: "M2.7 6.4 7.7 10.2 12 3.4l4.3 6.8 5-3.8-1.8 13.2H4.5L2.7 6.4Z" }));
+    return svg;
+  }
+
+  function heatSwatch(bin, label) {
+    const swatch = document.createElement("span");
+    swatch.className = "heat-swatch";
+
+    const chip = document.createElement("span");
+    chip.className = "heat-step";
+    if (bin !== null) chip.dataset.heat = String(bin);
+
+    const text = document.createElement("span");
+    text.className = "heat-swatch-label";
+    text.textContent = label;
+
+    swatch.append(chip, text);
+    return swatch;
+  }
+
+  function reignRange(reign) {
+    return reign.from === reign.to ? String(reign.from) : `${reign.from}–${reign.to}`;
+  }
+
   // Character × year grid: one row per character, one cell per calendar year,
-  // shaded by how much that character did that year.
+  // shaded by how much that character did that year — with the character who
+  // owned each year marked on top of the shading, since "who was my main, and
+  // when" is the question this chapter is really answering. The mark is a
+  // crown plus a ring, not a shade: it has to survive both themes and sit on
+  // any step of the ramp.
   function renderTimeline(container, lanes, years, options = {}) {
     const maxRows = options.maxRows || 18;
+    const eras = options.eras || [];
+    const reigns = options.reigns || [];
+
     const header = buildCard(
       container,
       "Your WoW years",
@@ -518,8 +571,23 @@
     const allCounts = [];
     for (const lane of lanes) for (const count of lane.byYear.values()) allCounts.push(count);
     const binOf = quantileBinner(allCounts, HEAT_BINS);
+    const ranges = binRanges(allCounts, binOf);
 
-    const shown = lanes.slice(0, maxRows);
+    const eraByYear = new Map(eras.map((era) => [era.year, era]));
+    const yearsHeld = new Map();
+    for (const era of eras) yearsHeld.set(era.character.key, (yearsHeld.get(era.character.key) || 0) + 1);
+
+    const reignsByKey = new Map();
+    for (const reign of reigns) {
+      const list = reignsByKey.get(reign.character.key) || [];
+      list.push(reignRange(reign));
+      reignsByKey.set(reign.character.key, list);
+    }
+
+    // A main who never earned enough overall to make the row cap is exactly
+    // the row a reader goes looking for, so mains are always kept.
+    const capped = new Set(lanes.slice(0, maxRows).map((lane) => lane.character.key));
+    const shown = lanes.filter((lane) => capped.has(lane.character.key) || yearsHeld.has(lane.character.key));
 
     // Grid, scale legend and row-cap note toggle together as one unit against
     // the table view.
@@ -545,11 +613,64 @@
       grid.appendChild(tick);
     }
 
+    // Reign ribbon: one named bar per stretch of years under the same
+    // character, sitting directly above the rows it describes. The cell marks
+    // below say which row owned a year; this says who, by name, without
+    // hovering anything.
+    if (reigns.length) {
+      const ribbonLabel = document.createElement("div");
+      ribbonLabel.className = "timeline-label timeline-ribbon-label";
+      ribbonLabel.textContent = "Main";
+      ribbonLabel.title = "The character who earned the most that year";
+      grid.appendChild(ribbonLabel);
+
+      let i = 0;
+      while (i < years.length) {
+        const era = eraByYear.get(years[i]);
+        let span = 1;
+        while (i + span < years.length) {
+          const next = eraByYear.get(years[i + span]);
+          const continues = era && next ? next.character.key === era.character.key : !era && !next;
+          if (!continues) break;
+          span++;
+        }
+
+        const segment = document.createElement("div");
+        segment.className = era ? "timeline-reign" : "timeline-reign is-empty";
+        segment.style.gridColumn = `span ${span}`;
+
+        if (era) {
+          const from = years[i];
+          const to = years[i + span - 1];
+          const name = document.createElement("span");
+          name.className = "timeline-reign-name";
+          name.textContent = era.character.name;
+          segment.append(crownIcon(), name);
+          attachTooltip(
+            segment,
+            era.character.name,
+            from === to ? `Your main in ${from}` : `Your main, ${from}–${to}`
+          );
+        }
+
+        grid.appendChild(segment);
+        i += span;
+      }
+    }
+
     for (const lane of shown) {
+      const held = yearsHeld.get(lane.character.key) || 0;
+
       const label = document.createElement("div");
-      label.className = "timeline-label";
-      label.textContent = lane.character.name;
-      label.title = `${lane.character.name} — ${lane.character.race} ${lane.character.class}, ${lane.character.realm}`;
+      label.className = held ? "timeline-label is-main" : "timeline-label";
+      if (held) label.appendChild(crownIcon());
+      const labelName = document.createElement("span");
+      labelName.className = "timeline-label-name";
+      labelName.textContent = lane.character.name;
+      label.appendChild(labelName);
+      label.title =
+        `${lane.character.name} — ${lane.character.race} ${lane.character.class}, ${lane.character.realm}` +
+        (held ? ` · your main in ${(reignsByKey.get(lane.character.key) || []).join(", ")}` : "");
       grid.appendChild(label);
 
       for (const year of years) {
@@ -558,10 +679,18 @@
         cell.className = "timeline-cell";
         const bin = binOf(count);
         if (bin >= 0) cell.dataset.heat = String(bin);
+
+        const era = eraByYear.get(year);
+        const isMain = Boolean(era) && era.character.key === lane.character.key;
+        if (isMain) {
+          cell.classList.add("is-main");
+          cell.appendChild(crownIcon());
+        }
+
         attachTooltip(
           cell,
           count === 0 ? "Nothing recorded" : `${count} achievement${count === 1 ? "" : "s"}`,
-          `${lane.character.name} · ${year}`
+          `${lane.character.name} · ${year}${isMain ? " · your main" : ""}`
         );
         grid.appendChild(cell);
       }
@@ -570,28 +699,44 @@
     scroller.appendChild(grid);
     chartWrap.appendChild(scroller);
 
-    // Sequential scales need a scale legend — the shades mean nothing without one.
+    // Sequential scales need a scale legend — the shades mean nothing without
+    // one, and here each step carries the count range it stands for so neither
+    // the direction of the ramp nor "how busy is busy" has to be inferred.
     const scale = document.createElement("div");
     scale.className = "heat-legend";
-    const less = document.createElement("span");
-    less.textContent = "Quieter";
+
+    const scaleTitle = document.createElement("span");
+    scaleTitle.className = "heat-legend-title";
+    scaleTitle.textContent = "Achievements earned";
+
     const ramp = document.createElement("span");
     ramp.className = "heat-ramp";
+    ramp.appendChild(heatSwatch(null, "0"));
     for (let i = 0; i < HEAT_BINS; i++) {
-      const step = document.createElement("span");
-      step.className = "heat-step";
-      step.dataset.heat = String(i);
-      ramp.appendChild(step);
+      const range = ranges[i];
+      // An account with fewer distinct counts than bins leaves gaps; an
+      // unlabelled empty step would just be a shade with no meaning.
+      if (!range) continue;
+      ramp.appendChild(heatSwatch(i, range.min === range.max ? String(range.min) : `${range.min}–${range.max}`));
     }
-    const more = document.createElement("span");
-    more.textContent = "Busier";
-    scale.append(less, ramp, more);
+    scale.append(scaleTitle, ramp);
+
+    if (eras.length) {
+      const mainKey = document.createElement("span");
+      mainKey.className = "heat-legend-main";
+      const chip = document.createElement("span");
+      chip.className = "heat-step is-main";
+      chip.appendChild(crownIcon());
+      mainKey.append(chip, document.createTextNode("Your main that year"));
+      scale.appendChild(mainKey);
+    }
+
     chartWrap.appendChild(scale);
 
     if (lanes.length > shown.length) {
       const note = document.createElement("p");
       note.className = "chart-note";
-      note.textContent = `Showing the ${shown.length} longest-running characters. All ${lanes.length} are in the table view.`;
+      note.textContent = `Showing ${shown.length} of ${lanes.length} characters — every year's main is included. All of them are in the table view.`;
       chartWrap.appendChild(note);
     }
 
@@ -601,12 +746,13 @@
     // have to be reachable without reading shades. Every lane appears here,
     // including the ones trimmed from the grid.
     const table = buildTable(
-      ["Character", "First seen", "Last seen", "Achievements"],
+      ["Character", "First seen", "Last seen", "Achievements", "Main in"],
       lanes.map((lane) => [
         `${lane.character.name} (${lane.character.realm})`,
         lane.firstSeen ? new Date(lane.firstSeen).toISOString().slice(0, 7) : "—",
         lane.lastSeen ? new Date(lane.lastSeen).toISOString().slice(0, 7) : "—",
         String(lane.total),
+        (reignsByKey.get(lane.character.key) || []).join(", ") || "—",
       ])
     );
     container.appendChild(table);

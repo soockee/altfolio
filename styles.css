@@ -26,6 +26,12 @@
   --heat-3: #1c5cab;
   --heat-4: #104281;
 
+  /* The "this was your main" mark rides on top of every step of the blue
+     ramp, so it is a hue the ramp never uses, carried with an outline that
+     keeps it legible on the lightest and the darkest cell alike. */
+  --main-accent: #b5730a;
+  --main-outline: rgba(255, 255, 255, 0.92);
+
   --row-hover: color-mix(in srgb, var(--series-1) 10%, transparent);
 
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -52,6 +58,9 @@
     --heat-2: #2a78d6;
     --heat-3: #5598e7;
     --heat-4: #86b6ef;
+
+    --main-accent: #f2c14e;
+    --main-outline: rgba(0, 0, 0, 0.7);
 
     --row-hover: color-mix(in srgb, var(--series-1) 16%, transparent);
   }
@@ -954,17 +963,68 @@ pre {
   position: sticky;
   left: 0;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
   background: var(--surface-1);
   padding-right: 0.5rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
   line-height: 1.6rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+.timeline-label-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A row that ever held a year reads as a name, not as another lane. */
+.timeline-label.is-main { color: var(--text-primary); font-weight: 600; }
+
+/* The crown is the only mark that has to survive on every step of the ramp
+   and on the card surface, so it carries its own outline via paint-order
+   rather than relying on whatever it lands on. */
+.crown-glyph {
+  flex: none;
+  width: 0.72rem;
+  height: 0.72rem;
+  fill: var(--main-accent);
+  stroke: var(--main-outline);
+  stroke-width: 2.4;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+
+/* --- reign ribbon --------------------------------------------------------- */
+
+.timeline-ribbon-label {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.35rem;
+}
+
+.timeline-reign {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  height: 1.35rem;
+  margin-bottom: 0.2rem;
+  padding: 0 0.4rem;
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--main-accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--main-accent) 60%, transparent);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  outline: none;
+}
+.timeline-reign.is-empty { background: none; box-shadow: none; }
+.timeline-reign-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-reign:hover, .timeline-reign:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--main-accent), 0 0 0 2px var(--surface-1), 0 0 0 3px var(--text-muted);
 }
 
 .timeline-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 1.6rem;
   border-radius: 3px;
   background: var(--gridline);
@@ -975,25 +1035,51 @@ pre {
 .timeline-cell[data-heat="2"] { background: var(--heat-2); }
 .timeline-cell[data-heat="3"] { background: var(--heat-3); }
 .timeline-cell[data-heat="4"] { background: var(--heat-4); }
+.timeline-cell.is-main { box-shadow: inset 0 0 0 2px var(--main-accent); }
 .timeline-cell:hover, .timeline-cell:focus-visible {
   box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 3px var(--text-muted);
+}
+/* Hover replaces the whole shadow, so the ring has to be restated here or the
+   crowned cell loses its mark exactly when you point at it. */
+.timeline-cell.is-main:hover, .timeline-cell.is-main:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--main-accent), 0 0 0 2px var(--surface-1), 0 0 0 3px var(--text-muted);
 }
 
 .heat-legend {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.5rem 1.1rem;
   margin-top: 0.85rem;
   font-size: 0.75rem;
   color: var(--text-muted);
 }
-.heat-ramp { display: inline-flex; gap: 2px; }
-.heat-step { width: 1.1rem; height: 0.7rem; border-radius: 2px; }
+.heat-legend-title { color: var(--text-secondary); }
+.heat-ramp { display: inline-flex; align-items: flex-start; gap: 0.35rem; }
+/* Each step is labelled with the counts it stands for: quantile bins have no
+   edges a reader could infer, and the ramp reverses between themes. */
+.heat-swatch { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+.heat-swatch-label { font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+.heat-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 0.7rem;
+  border-radius: 2px;
+  background: var(--gridline);
+}
 .heat-step[data-heat="0"] { background: var(--heat-0); }
 .heat-step[data-heat="1"] { background: var(--heat-1); }
 .heat-step[data-heat="2"] { background: var(--heat-2); }
 .heat-step[data-heat="3"] { background: var(--heat-3); }
 .heat-step[data-heat="4"] { background: var(--heat-4); }
+.heat-step.is-main {
+  height: 1.1rem;
+  background: color-mix(in srgb, var(--main-accent) 18%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--main-accent);
+}
+.heat-legend-main { display: inline-flex; align-items: center; gap: 0.4rem; }
 
 /* --- verdict -------------------------------------------------------------- */
 

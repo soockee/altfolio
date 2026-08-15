@@ -30,20 +30,26 @@
   const D2 = 73.42;
   const semitone = (n) => D2 * Math.pow(2, n / 12);
 
-  const BPM = 132;
+  const BPM = 84;
   const BEAT = 60 / BPM;
   const STEP = BEAT / 4; // sixteenth
-  const STEPS_PER_BAR = 16;
+  // 7/8. An odd meter loops without ever quite letting you settle into it,
+  // which is what keeps a repeating figure hypnotic instead of naggy over a
+  // wait this long — and it is most of why this reads as brooding rather than
+  // as a march. Accented 3+2+2, at sixteenth positions 0, 6 and 10.
+  const STEPS_PER_BAR = 14;
+  const ACCENTS = [0, 6, 10];
   const BARS = 4;
 
-  // Four bars, in semitones from D. Dm twice to establish it, then the drop to
-  // ♭VI and the turn onto ♭II — over the D pedal that last bar is a flat ninth,
-  // and the fact that it does not resolve is the point of it.
+  // Four bars, in semitones from D. Dm twice to settle in, the drop to ♭VI,
+  // then the turn onto A — which against the D pedal that never moves is a
+  // suspended fourth rather than a clean dominant, so it pulls back to bar one
+  // without ever resolving.
   const PROGRESSION = [
-    { root: 0, notes: [0, 3, 7] },   // Dm
-    { root: 0, notes: [0, 3, 7] },   // Dm
-    { root: -4, notes: [-4, 0, 3] }, // B♭
-    { root: 1, notes: [1, 5, 8] },   // E♭  (♭II)
+    { root: 0, notes: [0, 3, 7] },    // Dm
+    { root: 0, notes: [0, 3, 7] },    // Dm
+    { root: -4, notes: [-4, 0, 3] },  // B♭
+    { root: -5, notes: [-5, -1, 2] }, // A
   ];
 
   // How many players are on. Raised by phase, never lowered mid-run, and only
@@ -54,11 +60,21 @@
   const BLADE = [12, 15, 17, 19, 22, 24];
   const SPOT_MIN_GAP = 0.14;
 
+  // Chapters of the recap, as they scroll into view. Walks up D minor and stays
+  // there — each one is an answer, not a question, so the line rises but never
+  // leaves the mode.
+  const SECTION_NOTES = [0, 3, 7, 10, 12, 15, 19, 22];
+  const SECTION_MIN_GAP = 0.25;
+
+  // Sixteenth positions the arpeggio speaks on, within the bar of seven.
+  const ARPEGGIO = [0, 2, 5, 7, 9, 12];
+
   let ctx = null;
   let master = null;
   let comp = null;
   let reverb = null;
   let noiseBuf = null;
+  let echo = null;
   let bus = {};
   let padVoices = [];
   let droneGain = null;
@@ -77,6 +93,10 @@
   let drive = 0; // 0..1, the progress ring
   let lastSpot = 0;
   let bladeIndex = 0;
+  let lastSection = 0;
+  let sectionIndex = 0;
+  let lastSectionIndex = -1;
+  let reading = false; // recap on screen: keep playing, but out of the way
 
   const supported = typeof (window.AudioContext || window.webkitAudioContext) === "function";
 
@@ -171,16 +191,40 @@
       return node;
     }
 
-    // Drums stay drier than everything else — reverb on a war drum at this
-    // tempo smears the one thing that has to stay tight.
+    // Drums stay drier than everything else — reverb on a tom at this tempo
+    // smears the one thing that has to stay tight.
     bus = {
-      drum: makeBus(0.5, 0.18),
-      ost: makeBus(0.2, 0.25),
-      brass: makeBus(0.26, 0.6),
-      pad: makeBus(0.1, 0.9),
-      drone: makeBus(0.13, 0.3),
-      blade: makeBus(0.22, 0.85),
+      drum: makeBus(0.42, 0.22),
+      bass: makeBus(0.3, 0.12),
+      pluck: makeBus(0.22, 0.5),
+      brass: makeBus(0.16, 0.7),
+      pad: makeBus(0.09, 0.9),
+      drone: makeBus(0.15, 0.3),
+      blade: makeBus(0.18, 0.85),
     };
+
+    // Feedback delay on the arpeggio, at three sixteenths. Against a bar of
+    // seven that never lines up with itself, so the figure appears to answer
+    // itself in a different place each time round — the repeats do most of the
+    // work of making six plucked notes sound like a part. It is also the single
+    // cheapest way to sound like a room full of reverb-drenched guitar rather
+    // than like an oscillator.
+    echo = ctx.createDelay(2);
+    echo.delayTime.value = STEP * 3;
+    const feedback = ctx.createGain();
+    feedback.gain.value = 0.36;
+    const echoOut = ctx.createGain();
+    echoOut.gain.value = 0.55;
+    const echoDamp = ctx.createBiquadFilter();
+    // Each repeat darker than the last, as a real one would be.
+    echoDamp.type = "lowpass";
+    echoDamp.frequency.value = 1600;
+    echo.connect(echoDamp);
+    echoDamp.connect(feedback);
+    feedback.connect(echo);
+    echo.connect(echoOut);
+    echoOut.connect(comp);
+    echoOut.connect(reverb);
 
     // One noise buffer, shared. Drums and cymbals read from a random offset
     // rather than each allocating their own.
@@ -240,35 +284,37 @@
     return source;
   }
 
-  // War drum. A sine dropping fast through an octave and a half is the whole
-  // trick; the noise transient on top is what stops it sounding like a synth
-  // tom and starts it sounding like a struck skin.
-  function taiko(t, freq, gain) {
+  // Floor tom. Same trick as any struck skin — a sine dropping fast through an
+  // octave, with a noise transient for the stick — but tuned lower, decaying
+  // longer and with the transient pulled well back. That last part is the whole
+  // difference between a war drum announcing itself and a tom you can leave
+  // running underneath something you are trying to read.
+  function tom(t, freq, gain) {
     const peak = gain * level;
     if (!ctx || peak < 0.0005) return;
 
     const osc = ctx.createOscillator();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(freq * 3.2, t);
-    osc.frequency.exponentialRampToValueAtTime(freq, t + 0.07);
+    osc.frequency.setValueAtTime(freq * 2.4, t);
+    osc.frequency.exponentialRampToValueAtTime(freq, t + 0.1);
 
     const env = ctx.createGain();
     env.gain.setValueAtTime(0.0001, t);
-    env.gain.exponentialRampToValueAtTime(peak, t + 0.004);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+    env.gain.exponentialRampToValueAtTime(peak, t + 0.006);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
     osc.connect(env);
     env.connect(bus.drum);
     osc.start(t);
-    osc.stop(t + 0.6);
+    osc.stop(t + 0.75);
 
     const hitEnv = ctx.createGain();
-    hitEnv.gain.setValueAtTime(peak * 0.5, t);
-    hitEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+    hitEnv.gain.setValueAtTime(peak * 0.22, t);
+    hitEnv.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
     const band = ctx.createBiquadFilter();
     band.type = "bandpass";
-    band.frequency.value = 1800;
-    band.Q.value = 0.8;
-    const src = noiseAt(t, 0.06);
+    band.frequency.value = 1100;
+    band.Q.value = 0.9;
+    const src = noiseAt(t, 0.05);
     src.connect(band);
     band.connect(hitEnv);
     hitEnv.connect(bus.drum);
@@ -307,32 +353,69 @@
     env.connect(bus.drum);
   }
 
-  // Low strings, played short. The filter opening with `drive` is what turns a
-  // distant figure into a snarling one without touching the fader.
-  function ostinato(t, freq, duration, gain) {
+  // Bass, played with a pick. Two detuned saws an octave apart through a filter
+  // that snaps shut — the fast downward sweep is the pluck, and doing it with
+  // the filter rather than the amplitude is what keeps the note's body while
+  // still sounding struck. `drive` opens the starting point, so the same figure
+  // is felt more than heard early on and has teeth by the end.
+  function bass(t, freq, duration, gain) {
     const peak = gain * level;
     if (!ctx || peak < 0.0005) return;
 
-    const osc = ctx.createOscillator();
-    osc.type = "sawtooth";
-    osc.frequency.value = freq;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+    env.gain.setValueAtTime(peak, t + duration * 0.5);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    env.connect(bus.bass);
 
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
-    lp.Q.value = 6;
-    lp.frequency.setValueAtTime(freq * (5 + drive * 9), t);
-    lp.frequency.exponentialRampToValueAtTime(freq * 2.2, t + duration);
+    lp.Q.value = 7;
+    lp.frequency.setValueAtTime(freq * (4 + drive * 7), t);
+    lp.frequency.exponentialRampToValueAtTime(freq * 1.6, t + duration * 0.7);
+    lp.connect(env);
+
+    for (const [mult, detune] of [[1, -5], [1, 6], [0.5, 0]]) {
+      const osc = ctx.createOscillator();
+      osc.type = mult < 1 ? "square" : "sawtooth";
+      osc.frequency.value = freq * mult;
+      osc.detune.value = detune;
+      const g = ctx.createGain();
+      g.gain.value = mult < 1 ? 0.5 : 0.4;
+      osc.connect(g);
+      g.connect(lp);
+      osc.start(t);
+      osc.stop(t + duration + 0.05);
+    }
+  }
+
+  // The arpeggio. Clean, plucked, and deliberately thin on its own — it is
+  // written to be heard through the delay, which is where it turns into a part.
+  // Triangle rather than saw keeps it dark enough to sit under text.
+  function pluck(t, semi, gain) {
+    const peak = gain * level;
+    if (!ctx || peak < 0.0005) return;
+    const freq = semitone(semi);
 
     const env = ctx.createGain();
     env.gain.setValueAtTime(0.0001, t);
-    env.gain.exponentialRampToValueAtTime(peak, t + 0.006);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+    env.gain.exponentialRampToValueAtTime(peak, t + 0.01);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    env.connect(bus.pluck);
+    env.connect(echo);
 
-    osc.connect(lp);
-    lp.connect(env);
-    env.connect(bus.ost);
-    osc.start(t);
-    osc.stop(t + duration + 0.02);
+    for (const [mult, weight, type] of [[1, 1, "triangle"], [2, 0.16, "sine"], [3, 0.07, "sine"]]) {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.value = freq * mult;
+      const g = ctx.createGain();
+      g.gain.value = weight;
+      osc.connect(g);
+      g.connect(env);
+      osc.start(t);
+      osc.stop(t + 1.2);
+    }
   }
 
   // Brass. Slower attack than the strings and a filter that falls rather than
@@ -447,44 +530,50 @@
       setPad(chord, t);
     }
 
-    const root = semitone(chord.root + 12);
+    const root = semitone(chord.root);
     const hard = drive > 0.62; // the back half of the history read
+    const accent = ACCENTS.indexOf(s); // 3+2+2; -1 anywhere else
 
     // --- drums ---
-    if (layer >= 1) {
-      if (s === 0) taiko(t, 55, 1);
-      if (s === 8) taiko(t, 55, 0.85);
-    }
+    // The 3+2+2 skeleton and nothing more until late. What makes seven feel
+    // like seven is where the toms *aren't*.
+    if (layer >= 1 && s === 0) tom(t, 58, 0.85);
     if (layer >= 2) {
-      if (s === 4 || s === 12) taiko(t, 82, 0.6);
-      if (s % 4 === 2) rattle(t, 0.16);
+      if (s === 6) tom(t, 82, 0.55);
+      if (s === 10) tom(t, 73, 0.5);
+      if (s === 4 || s === 12) rattle(t, 0.07);
     }
     if (layer >= 3) {
-      if (s === 6 || s === 14) taiko(t, 65, 0.5);
-      if (hard && s % 2 === 1) rattle(t, 0.1);
-      // Fill across the last half-bar of the loop, so four bars never pass
-      // without something changing.
-      if (bar === BARS - 1 && s >= 12) taiko(t, 70 + (s - 12) * 6, 0.45);
+      if (s === 3 || s === 13) tom(t, 98, 0.28);
+      if (hard && s % 2 === 1) rattle(t, 0.05);
+      // A turn across the end of the four-bar phrase, so the loop never comes
+      // round twice looking identical.
+      if (bar === BARS - 1 && s >= 10) tom(t, 92 - (s - 10) * 7, 0.3);
     }
-    if (layer >= 4 && s === 0 && bar === 0) crash(t, 0.32);
+    if (layer >= 4 && s === 0 && bar === 0) crash(t, 0.22);
 
-    // --- low strings ---
+    // --- bass ---
+    if (layer >= 1 && accent >= 0) {
+      bass(t, root, STEP * (accent === 0 ? 2.4 : 1.7), accent === 0 ? 0.8 : 0.55);
+    }
+    if (layer >= 3 && s === 13) bass(t, root * 2, STEP * 1.1, 0.35);
+
+    // --- arpeggio ---
+    // Six notes over fourteen steps: sparse on the page, dense once the delay
+    // fills the gaps in.
     if (layer >= 1) {
-      const eighth = s % 2 === 0;
-      const sixteenth = layer >= 2 && (hard || layer >= 4);
-      if (eighth || sixteenth) {
-        const accent = s === 0 ? 1 : s % 4 === 0 ? 0.8 : 0.55;
-        ostinato(t, root, STEP * 0.9, accent);
+      const at = ARPEGGIO.indexOf(s);
+      if (at >= 0) {
+        const semi = chord.notes[at % chord.notes.length] + (at >= 4 ? 24 : 12);
+        pluck(t, semi, at === 0 ? 0.45 : 0.3);
       }
     }
 
-    // --- brass ---
-    if (layer >= 3) {
-      const voicing = chord.notes.map((n) => n + 24);
-      if (s === 0) brass(t, voicing, 0.5, BEAT * 1.6);
-      if (s === 10 && (bar === 1 || bar === 3)) brass(t, voicing, 0.32, BEAT * 0.7);
-    } else if (layer >= 2 && s === 0 && bar % 2 === 0) {
-      brass(t, chord.notes.map((n) => n + 24), 0.3, BEAT * 1.4);
+    // --- brass, sparingly ---
+    // One slow swell every other bar. Any more and it stops being a colour and
+    // starts being the tune, which is not what background music is for.
+    if (layer >= 3 && s === 0 && bar % 2 === 0) {
+      brass(t, chord.notes.map((n) => n + 12), 0.28, BEAT * 2.6);
     }
   }
 
@@ -524,12 +613,15 @@
     // so it is deliberately short.
     begin() {
       const t = ctx.currentTime;
-      taiko(t, 48, 1);
-      crash(t, 0.32);
-      brass(t, [12, 19, 24], 0.42, 1.1);
+      tom(t, 50, 0.9);
+      brass(t, [0, 12, 19], 0.34, 1.4);
+      pluck(t, 12, 0.4);
     },
 
     phase(id) {
+      // Once the recap is up the arrangement is settled; a late phase call
+      // shouldn't build it back up underneath someone who is reading.
+      if (reading) return;
       const next = LAYER[id];
       if (next == null) return;
       if (next > pendingLayer) {
@@ -553,32 +645,50 @@
       bladeIndex++;
     },
 
-    // The recap is ready. The whole point of a battle cue is that it stops, so
-    // this is a full stop rather than another swell: the loop drops out, one
-    // last chord lands, and it rings.
+    // The recap is ready. Not a full stop — the loop carries on underneath the
+    // reading, which is the point of writing something hypnotic in seven rather
+    // than something that peaks. What changes is the arrangement: one marker
+    // lands, the players that were added for the build drop away, and what is
+    // left is the pulse, the bass and the arpeggio at about half the level.
     arrive() {
       if (!ctx) return;
-      stopSequencer();
       const t = ctx.currentTime;
-      taiko(t, 46, 1.05);
-      crash(t, 0.55);
-      brass(t, [0, 12, 19, 24], 0.62, 4.6);
-      padVoices.forEach((voice, i) => {
-        voice.osc.frequency.setTargetAtTime(semitone([0, 7, 12][i] + 12), t, 0.05);
-        voice.gain.gain.setTargetAtTime(0.5, t, 0.1);
-      });
+      tom(t, 52, 0.9);
+      crash(t, 0.26);
+      brass(t, [0, 12, 19], 0.42, 3.4);
+      pluck(t, 24, 0.5);
 
-      // Held up for the length of the hit, then a long fade under the ring-out.
-      // Fading from the instant it lands would make the biggest moment in the
-      // piece also the first thing to start getting quieter — and this is the
-      // one chord the whole build exists to arrive at. The recap is a reading
-      // experience, so it does have to leave; twelve seconds is the tail of the
-      // cadence rather than a bed.
-      const now = holdNow(master.gain);
-      master.gain.linearRampToValueAtTime(0.82, now + 0.05);
-      master.gain.setValueAtTime(0.82, now + 1.8);
-      master.gain.linearRampToValueAtTime(0.0001, now + 12);
-      level = 0;
+      reading = true;
+      layer = 1;
+      pendingLayer = 1;
+      // Close the bass filter back down. `intensity` stops being called once
+      // loading is over, so without this the reading arrangement would keep
+      // whatever bite the end of the history read left it with.
+      drive = 0.2;
+      rampTo(master.gain, 0.42, 5);
+    },
+
+    // A chapter of the recap has scrolled into view. Walks up D minor so the
+    // sections feel like they are going somewhere, and goes through the same
+    // delay as the arpeggio, so it lands as part of the music rather than as a
+    // UI beep on top of it.
+    section(n) {
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      if (now - lastSection < SECTION_MIN_GAP) return;
+      lastSection = now;
+
+      const index = typeof n === "number" ? n : sectionIndex++;
+      // Scrolling back up plays the same scale degree an octave down and
+      // softer. The sequence already reverses on its own, since the note is
+      // keyed to the chapter's position — this just makes going back sound
+      // like going back rather than like arriving somewhere new. Direction is
+      // worked out here rather than passed in, so the caller stays a caller.
+      const back = index < lastSectionIndex;
+      lastSectionIndex = index;
+
+      pluck(now, SECTION_NOTES[index % SECTION_NOTES.length] + (back ? 12 : 24), back ? 0.32 : 0.42);
+      tom(now, 96, back ? 0.11 : 0.16);
     },
   };
 
@@ -591,11 +701,11 @@
   // 0..1 across the whole run. Opens the ostinato filter and hardens the drum
   // pattern; the arrangement itself is the phase's job, not this one's.
   function intensity(fraction) {
-    if (!on || !ctx || level === 0) return;
+    if (!on || !ctx || reading) return;
     drive = Math.max(0, Math.min(1, fraction));
     const now = ctx.currentTime;
-    bus.ost.gain.setTargetAtTime(0.2 + drive * 0.12, now, 0.8);
-    bus.drum.gain.setTargetAtTime(0.5 + drive * 0.14, now, 0.8);
+    bus.bass.gain.setTargetAtTime(0.3 + drive * 0.14, now, 0.8);
+    bus.drum.gain.setTargetAtTime(0.42 + drive * 0.12, now, 0.8);
   }
 
   // --- toggle --------------------------------------------------------------
@@ -736,6 +846,9 @@
     level = 1;
     drive = 0;
     bladeIndex = 0;
+    sectionIndex = 0;
+    lastSectionIndex = -1;
+    reading = false;
     layer = 0;
     pendingLayer = 0;
     pendingCrash = false;

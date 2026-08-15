@@ -30,44 +30,88 @@ working, audible. Same rule as the rest of the stage: nothing is filler.
 
 ## What it plays
 
-A battle cue: 132bpm, a four-bar loop in D over a pedal drone, war drums and a
-short low-string ostinato under brass. The progression is Dm, Dm, B♭, then the
-turn onto E♭ — the ♭II, which over a D pedal is a flat ninth. It is the chord
-that does most of the work in this genre, and the fact that it never resolves is
-the point: it hands the loop back to bar one still leaning forward.
+Dark, slow and hypnotic rather than heroic: **84bpm in 7/8**, a four-bar loop in
+D over a pedal drone that never moves. Floor toms on a 3+2+2 accent, a picked
+bass, and a six-note arpeggio through a feedback delay. The progression is Dm,
+Dm, B♭, A — and because the drone stays on D under all of it, that last bar is a
+suspended fourth rather than a clean dominant, so it pulls back to bar one
+without ever resolving.
 
-**It builds by adding players, not by getting louder.** That is the only way a
-loop survives a wait that might have another forty seconds left in it, and it
-maps exactly onto the phases, which is the whole reason the score is worth
-synthesising rather than playing back:
+The odd meter is doing the work. Seven never lets you settle into it, which is
+what keeps a repeating figure hypnotic instead of naggy across a wait that might
+have another forty seconds in it — and it's most of why this reads as brooding
+rather than as a march. What makes seven feel like seven is where the toms
+*aren't*.
+
+The delay is set to three sixteenths, which against a bar of seven never lines up
+with itself: the arpeggio appears to answer itself in a different place each time
+round, and six plucked notes end up sounding like a part. Each repeat is filtered
+darker than the last, as a real one would be.
+
+**It builds by adding players, not by getting louder** — the only way a loop
+survives a wait this long, and it maps onto the phases, which is the whole reason
+the score is worth synthesising rather than playing back:
 
 | Phase | Who joins |
 | --- | --- |
 | Sign in | Drone and distant voices only. Nothing has started yet. |
-| Roster | War drums on the downbeats; the low ostinato on eighths. |
-| Dates | Off-beat drums, rattle on the upbeats, first brass. |
-| History | Full brass, the sixteenth-note drive, and a fill in bar four. |
-| Verdict | Everything, with a crash on the downbeat. |
+| Roster | Tom on the downbeat, bass on the 3+2+2, the arpeggio. |
+| Dates | Toms on the second and third accents; rattle on the upbeats. |
+| History | Ghost toms, a slow brass swell every other bar, a turn in bar four. |
+| Verdict | Everything, with one crash. |
 
-Two things move continuously underneath that. The progress ring (0–1) opens the
-ostinato's filter and pushes the drum bus, so the same figure that is distant at
-10% is snarling at 90% without anyone touching a fader; past about 62% the
-pattern itself hardens to sixteenths. And each character read rings a **blade** —
-struck metal with deliberately inharmonic partials, so it reads as a weapon being
-tested rather than a chime — walking up a D minor pentatonic, because a rising
-line under a filling ring reads as progress where random pitches read as noise.
-Rate-limited to one every 140ms, or a 40-alt roster machine-guns.
+Two things move continuously underneath. The progress ring (0–1) opens the bass
+filter and pushes the drum bus, so the same figure is felt more than heard early
+and has teeth by the end; past about 62% the rattle doubles to sixteenths. And
+each character read rings a **blade** — struck metal with deliberately inharmonic
+partials, so it reads as a weapon being tested rather than a chime — walking up a
+D minor pentatonic, because a rising line under a filling ring reads as progress
+where random pitches read as noise. Rate-limited to one every 140ms, or a 40-alt
+roster machine-guns.
 
 Entries land **on a bar line, never mid-bar**, so a phase change can't drop a new
 section onto an offbeat. Since the phase can be requested anywhere in the bar, a
 noise riser covers the gap between the request and the entry.
 
-The arrival is a full stop rather than another swell — the whole point of a
-battle cue is that it ends. The loop cuts, one last chord lands with a crash, the
-mix is held up for 1.8 seconds so the biggest moment in the piece isn't also the
-first thing to start getting quieter, and then it rings out over twelve seconds.
-That fade is the tail of the cadence, not a bed: the recap is a reading
-experience and a drone under it outstays its welcome fast.
+## After the loading: the recap keeps playing
+
+The arrival is not a full stop. That is the point of writing something hypnotic
+in seven rather than something that peaks — it can carry on underneath the
+reading without demanding anything. One marker lands (tom, brief brass, a pluck),
+then the players added for the build drop away, the bass filter closes back down,
+and the mix settles to about half level. What's left is the pulse, the bass and
+the arpeggio.
+
+The bass filter has to be closed explicitly there: `intensity` stops being called
+once loading is over, so otherwise the reading arrangement would keep whatever
+bite the end of the history read left it with.
+
+Each chapter of the recap rings a note as it scrolls into view — walking up D
+minor and staying in the mode, since each chapter is an answer rather than a
+question. They go through the same delay as the arpeggio, so a section landing is
+part of the music rather than a UI beep on top of it. The cue is keyed to the
+chapter's **position in the page**, not to the order the observer happened to
+fire in, so it doesn't reshuffle if two cross the threshold in the same frame —
+and, more usefully, the sequence reverses for free when you scroll back up.
+
+**It fires in both directions.** Chapters are never unobserved, so the page stays
+responsive however you move through it rather than going quiet once you have seen
+everything once. A `Set` of what is currently in view is what makes that safe:
+the cue fires on the transition into view, not on every callback, so a chapter
+resting on the threshold can't stutter. Going backwards plays the same scale
+degree an octave down and softer — the sequence already descends on its own, and
+this just makes going back sound like going back rather than like arriving
+somewhere new. Direction is worked out inside audio.js by comparing against the
+last index played, so the caller stays a caller.
+
+The reveal animation stays one-way. Re-animating text you have already read on
+the way back up is motion for its own sake, and re-hiding it would be worse.
+
+One thing worth knowing: `prefers-reduced-motion` suppresses the reveal
+*animation*, not the sound. Those are separate preferences, and someone who
+turned the score on still wants the chapters to land — so under reduced motion
+the chapters are shown immediately but the observer is still built, and still
+fires only as each one actually scrolls into view.
 
 ## Timing, and why there's a scheduler
 

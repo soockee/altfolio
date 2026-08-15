@@ -205,7 +205,33 @@
       if (eras[i].character.key !== eras[i - 1].character.key) switches++;
     }
 
-    return { eras, switches };
+    return { eras, switches, reigns: buildReigns(eras) };
+  }
+
+  // Consecutive years under the same character, collapsed into one run. This
+  // is the form the recap actually talks in — "Kaeltas held 2012 to 2015" —
+  // rather than the per-year table underneath it. A quiet year that failed the
+  // era gates doesn't break a run: it isn't in `eras` at all, so the run either
+  // side of it reads as continuous, which is what the player remembers.
+  function buildReigns(eras) {
+    const reigns = [];
+    for (const era of eras) {
+      const current = reigns[reigns.length - 1];
+      if (current && current.character.key === era.character.key) {
+        current.to = era.year;
+        current.years.push(era.year);
+        current.count += era.count;
+      } else {
+        reigns.push({
+          character: era.character,
+          from: era.year,
+          to: era.year,
+          years: [era.year],
+          count: era.count,
+        });
+      }
+    }
+    return reigns;
   }
 
   // The longest stretch with no achievement anywhere on the account, and
@@ -400,7 +426,7 @@
     const realms = new Set(characters.map((c) => c.realm).filter(Boolean));
 
     const { lanes, years } = buildLanes(characters, entries, logins);
-    const { eras, switches } = buildEras(entries);
+    const { eras, switches, reigns } = buildEras(entries);
     const gap = buildGap(entries);
 
     const firstSeen = lanes.length && lanes[0].firstSeen !== null ? lanes[0].firstSeen : null;
@@ -454,7 +480,7 @@
         topIsUnique: isUniqueTop(classes),
         least: uniqueLeast(classes),
       },
-      timeline: { lanes, years, eras },
+      timeline: { lanes, years, eras, reigns },
       milestones: accountWide,
       gap,
       verdict: ranked[0],
