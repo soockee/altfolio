@@ -1,9 +1,10 @@
 // Boot: finish the OAuth callback if we're returning from Battle.net, then
-// walk the four reads the journey needs, staging the wait as it goes.
+// walk the reads the journey needs, staging the wait as it goes.
 //
-// The reads degrade independently. Character detail and achievement history
-// are both slow, per-character, and failure-prone; either can drop out and
-// still leave a journey worth reading, so neither is allowed to abort the run.
+// The reads degrade independently. Character detail, achievement history and
+// raid history are all slow, per-character, and failure-prone; any of them can
+// drop out and still leave a journey worth reading, so none of them is allowed
+// to abort the run.
 //
 // This file owns the pacing of the loading stage as well as the reads, because
 // it is the only thing that holds the data as it arrives. stage.js renders;
@@ -34,11 +35,12 @@
   // rather than split evenly, since an evenly-split bar spends most of the
   // wait apparently frozen inside one segment.
   const SPAN = {
-    connect: [0, 0.04],
-    characters: [0.04, 0.1],
-    detail: [0.1, 0.42],
-    history: [0.42, 0.95],
-    verdict: [0.95, 1],
+    connect: [0, 0.03],
+    characters: [0.03, 0.08],
+    detail: [0.08, 0.32],
+    history: [0.32, 0.74],
+    raids: [0.74, 0.96],
+    verdict: [0.96, 1],
   };
 
   // Screen and score are told the same thing at the same time, from here.
@@ -161,22 +163,28 @@
 
     const datable = characters.filter((c) => c.realmSlug).length;
 
-    // --- last-played dates ---
+    // --- character detail: dates, gear, guild ---
     phase("detail");
     at("detail", 0);
 
-    let lastLogins = new Map();
+    let detail = new Map();
     let newestLogin = 0;
+    let bestItemLevel = 0;
     try {
-      lastLogins = await window.BnetProfile.fetchLastLogins(token, characters, (done, total, settled) => {
+      detail = await window.BnetProfile.fetchDetail(token, characters, (done, total, settled) => {
         at("detail", done / total);
         stage.note(`${fmt.format(done)} of ${fmt.format(total)} characters dated`);
         if (settled && settled.item) spot(settled.item);
-        if (settled && settled.value && typeof settled.value.last_login_timestamp === "number") {
+        if (!settled || !settled.value) return;
+        if (typeof settled.value.last_login_timestamp === "number") {
           newestLogin = Math.max(newestLogin, settled.value.last_login_timestamp);
+        }
+        if (typeof settled.value.equipped_item_level === "number") {
+          bestItemLevel = Math.max(bestItemLevel, settled.value.equipped_item_level);
         }
       });
       if (newestLogin) stage.fact(`You were last in Azeroth in ${monthYear.format(new Date(newestLogin))}.`);
+      if (bestItemLevel) stage.fact(`Your best-geared character is sitting at item level ${bestItemLevel}.`);
     } catch (err) {
       stage.fail("detail", "Couldn't read last-played dates — the recap will lean on achievements instead.");
       console.warn("Character detail unavailable:", err.message);
@@ -197,9 +205,9 @@
         if (settled && settled.item) spot(settled.item);
         if (!settled || !settled.value) return;
 
-        read += settled.value.length;
+        read += settled.value.entries.length;
         stage.counter("achievements", read);
-        for (const entry of settled.value) {
+        for (const entry of settled.value.entries) {
           if (entry.timestamp < earliest) earliest = entry.timestamp;
           if (entry.timestamp > latest) latest = entry.timestamp;
         }
@@ -218,11 +226,35 @@
       console.warn("Achievement history unavailable:", err.message);
     }
 
+    // --- raid history ---
+    // The only per-character record the API dates *and* labels by expansion,
+    // which is what turns "2017" into "Legion" in the recap. Failure here is
+    // as survivable as the two reads above: without it the main chapter falls
+    // back to gear alone, and the rest of the journey is untouched.
+    phase("raids");
+    at("raids", 0);
+
+    let raids = null;
+    let bosses = 0;
+    try {
+      raids = await window.BnetRaids.fetchAllRaids(token, characters, (done, total, settled) => {
+        at("raids", done / total);
+        stage.note(`${fmt.format(done)} of ${fmt.format(total)} raid records read`);
+        if (settled && settled.item) spot(settled.item);
+        if (!settled || !settled.value) return;
+        for (const tally of settled.value) bosses += tally.kills;
+      });
+      if (bosses) stage.fact(`${fmt.format(bosses)} raid bosses have died to your account.`);
+    } catch (err) {
+      stage.fail("raids", "Couldn't read raid history — the recap will skip the expansion eras.");
+      console.warn("Raid history unavailable:", err.message);
+    }
+
     // --- verdict ---
     phase("verdict");
     at("verdict", 0);
 
-    const journey = window.BnetJourney.build({ characters, activity, lastLogins });
+    const journey = window.BnetJourney.build({ characters, activity, detail, raids });
 
     at("verdict");
     stage.note(journey.verdict.title);

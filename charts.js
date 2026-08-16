@@ -759,5 +759,93 @@
     addTableToggle(header, chartWrap, table);
   }
 
-  window.BnetCharts = { renderKpiRow, renderBarChart, renderTugOfWar, renderTimeSeries, renderTimeline, fillIcon };
+  // One row per expansion, in the order they were played, naming the character
+  // who cleared the most of it — the expansion-scale answer to "who was my
+  // main", where the timeline grid above gives the year-scale one.
+  //
+  // The bar carries that character's *share* of the account's boss kills in
+  // that expansion, not the raw count, because the interesting thing is how
+  // decisively they held it: a 90% share is a main, a 40% share is a roster
+  // that was being played evenly.
+  function renderReigns(container, eras, options = {}) {
+    const header = buildCard(
+      container,
+      "Who held each expansion",
+      eras.length ? "By raid bosses killed, oldest expansion first" : null
+    );
+
+    if (eras.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "chart-empty";
+      empty.textContent = "No raid history to attribute.";
+      container.appendChild(empty);
+      return;
+    }
+
+    const rows = document.createElement("div");
+    rows.className = "chart-rows";
+
+    for (const era of eras) {
+      const row = document.createElement("div");
+      row.className = "bar-row reign-row";
+
+      const labelEl = document.createElement("span");
+      labelEl.className = "bar-label";
+      labelEl.textContent = era.expansion;
+
+      const track = document.createElement("div");
+      track.className = "bar-track";
+      const fill = document.createElement("div");
+      fill.className = "bar-fill";
+      fill.style.width = `${Math.round(era.share * 100)}%`;
+      track.appendChild(fill);
+
+      const holder = document.createElement("span");
+      holder.className = "bar-value reign-holder";
+      holder.append(crownIcon(), document.createTextNode(era.character.name));
+
+      row.append(labelEl, track, holder);
+      attachTooltip(
+        row,
+        `${era.character.name} — ${era.bosses} boss${era.bosses === 1 ? "" : "es"}, ${Math.round(era.share * 100)}% of the account's kills`,
+        era.expansion
+      );
+      rows.appendChild(row);
+    }
+
+    // Rows and the caveat under them toggle as one unit against the table, the
+    // same way the timeline's grid and its row-cap note do.
+    const chartWrap = document.createElement("div");
+    chartWrap.appendChild(rows);
+    if (options.note) {
+      const note = document.createElement("p");
+      note.className = "chart-note";
+      note.textContent = options.note;
+      chartWrap.appendChild(note);
+    }
+    container.appendChild(chartWrap);
+
+    const table = buildTable(
+      ["Expansion", "Main", "Bosses", "Share", "Last kill"],
+      eras.map((era) => [
+        era.expansion,
+        `${era.character.name} (${era.character.realm})`,
+        String(era.bosses),
+        `${Math.round(era.share * 100)}%`,
+        era.to ? new Date(era.to).toISOString().slice(0, 7) : "—",
+      ])
+    );
+    container.appendChild(table);
+    addTableToggle(header, chartWrap, table);
+  }
+
+  window.BnetCharts = {
+    renderKpiRow,
+    renderBarChart,
+    renderTugOfWar,
+    renderTimeSeries,
+    renderTimeline,
+    renderReigns,
+    fillIcon,
+  };
 })();

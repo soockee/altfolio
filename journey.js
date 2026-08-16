@@ -234,6 +234,205 @@
     return reigns;
   }
 
+  // --- the main -------------------------------------------------------------
+
+  // An expansion has to have seen real raiding before it gets to name a main,
+  // for the same reason ERA_MIN_ACHIEVEMENTS exists: two bosses killed on one
+  // alt is not a reign.
+  const EXPANSION_MIN_BOSSES = 3;
+
+  // Who was the main in each expansion, from raid kills rather than
+  // achievement counts.
+  //
+  // This is a better answer than buildEras gives for two reasons. Boss kills
+  // are unambiguously the killing character's, so nothing here is muddied by
+  // account-wide sharing. And the API hands back the expansion's *name*, so
+  // the era can be called "Legion" instead of "2017" — which is the unit
+  // players remember their own history in. Expansions don't line up with
+  // calendar years, and a main who was handed over mid-expansion shows up
+  // properly here rather than being split across two year buckets.
+  //
+  // Expansions are ordered by the earliest kill seen in them rather than by
+  // id, since expansion ids are not chronological.
+  function buildExpansionEras(raidRows) {
+    const byExpansion = new Map();
+    for (const row of raidRows) {
+      const list = byExpansion.get(row.expansion) || [];
+      list.push(row);
+      byExpansion.set(row.expansion, list);
+    }
+
+    const eras = [];
+    for (const [expansion, rows] of byExpansion) {
+      const ranked = rows.slice().sort((a, b) => b.bosses - a.bosses || b.kills - a.kills);
+      const top = ranked[0];
+      const runnerUp = ranked[1] || null;
+
+      if (top.bosses < EXPANSION_MIN_BOSSES) continue;
+      // The same gate the composition chapters use before singling anything
+      // out: two characters level with each other did not have a main between
+      // them.
+      const clear = !runnerUp || top.bosses > runnerUp.bosses || (top.bosses === runnerUp.bosses && top.kills > runnerUp.kills);
+      if (!clear) continue;
+
+      const totalBosses = rows.reduce((sum, r) => sum + r.bosses, 0);
+      const first = rows.reduce((min, r) => (r.first !== null && (min === null || r.first < min) ? r.first : min), null);
+
+      eras.push({
+        expansion,
+        character: top.character,
+        bosses: top.bosses,
+        kills: top.kills,
+        from: top.first,
+        to: top.last,
+        share: totalBosses ? top.bosses / totalBosses : 0,
+        contenders: rows.length,
+        sortKey: first !== null ? first : Infinity,
+      });
+    }
+
+    eras.sort((a, b) => a.sortKey - b.sortKey);
+
+    // Consecutive expansions under the same character, collapsed — the same
+    // shape buildReigns produces for years, so the two read alike downstream.
+    const reigns = [];
+    for (const era of eras) {
+      const current = reigns[reigns.length - 1];
+      if (current && current.character.key === era.character.key) {
+        current.to = era.expansion;
+        current.expansions.push(era.expansion);
+        current.bosses += era.bosses;
+      } else {
+        reigns.push({
+          character: era.character,
+          from: era.expansion,
+          to: era.expansion,
+          expansions: [era.expansion],
+          bosses: era.bosses,
+        });
+      }
+    }
+
+    let switches = 0;
+    for (let i = 1; i < eras.length; i++) {
+      if (eras[i].character.key !== eras[i - 1].character.key) switches++;
+    }
+
+    return { eras, reigns, switches };
+  }
+
+  // A character that hasn't been touched in this long is not the current main,
+  // whatever it is wearing.
+  const MAIN_RECENCY_DAYS = 90;
+  // How many item levels have to separate two characters before the gap means
+  // anything. Gear scores are measured against the account's own spread, but
+  // the spread alone can't be trusted: two characters at 640 and 639 have a
+  // spread of one, and dividing by it would turn a rounding error into a
+  // landslide. Scoring against at least this much — roughly a tier's worth of
+  // gear — keeps a trivial gap reading as the tie it is.
+  const GEAR_SIGNIFICANT = 25;
+  // How far the leader has to be ahead before the recap will name anyone. A
+  // main and their best-geared alt can sit very close together, and "your main
+  // is probably one of these two" is not a claim worth printing.
+  const MAIN_MIN_LEAD = 0.12;
+
+  // Who the main is *now*, scored from the three signals the character summary
+  // already carries. None of these is stated by the API as "this is the main" —
+  // there is no such field — but together they are much firmer ground than the
+  // achievement counting the yearly eras rest on:
+  //
+  //   item level  the strongest of the three. Gear is the one resource that
+  //               genuinely doesn't get spent on an alt.
+  //   recency     the main is what you last logged into. Weighted below gear
+  //               because a levelling project inverts it for a few weeks.
+  //   guild       mains sit in the guild you actually raid with; alts sit in a
+  //               bank guild or none. Weak on its own — a whole roster in one
+  //               guild says nothing — so it only breaks ties.
+  //
+  // Returns null when nothing separates the top two, which is the honest
+  // answer for an account played evenly across several characters.
+  function buildCurrentMain(characters, detail) {
+    const rated = characters
+      .map((c) => ({ character: c, d: detail.get(c.key) }))
+      .filter((r) => r.d && r.d.itemLevel);
+    if (rated.length === 0) return null;
+
+    const levels = rated.map((r) => r.d.itemLevel);
+    const maxLevel = Math.max(...levels);
+    const minLevel = Math.min(...levels);
+    const spread = maxLevel - minLevel;
+
+    const logins = rated.map((r) => r.d.lastLogin).filter((t) => typeof t === "number");
+    const newestLogin = logins.length ? Math.max(...logins) : null;
+
+    // The guild the most characters sit in — "the guild you actually play in",
+    // as opposed to whichever one a given alt was parked in.
+    const guildCounts = new Map();
+    for (const r of rated) {
+      if (r.d.guild) guildCounts.set(r.d.guild, (guildCounts.get(r.d.guild) || 0) + 1);
+    }
+    let homeGuild = null;
+    let homeCount = 0;
+    for (const [name, count] of guildCounts) {
+      if (count > homeCount) {
+        homeGuild = name;
+        homeCount = count;
+      }
+    }
+
+    // Measured against the account's own spread rather than against the raw
+    // maximum — dividing by the max would score 640 and 632 as 1.00 and 0.99
+    // and decide nothing — but floored at GEAR_SIGNIFICANT so a spread of one
+    // or two item levels stays as meaningless as it actually is.
+    const gearScale = Math.max(spread, GEAR_SIGNIFICANT);
+
+    const scored = rated.map((r) => {
+      const gear = (r.d.itemLevel - minLevel) / gearScale;
+
+      let recency = 0;
+      if (newestLogin && typeof r.d.lastLogin === "number") {
+        const daysBehind = (newestLogin - r.d.lastLogin) / MS_PER_DAY;
+        recency = clamp(1 - daysBehind / MAIN_RECENCY_DAYS);
+      }
+
+      const guilded = homeGuild && r.d.guild === homeGuild ? 1 : 0;
+      const titled = r.d.activeTitle ? 1 : 0;
+
+      return {
+        character: r.character,
+        detail: r.d,
+        gear,
+        recency,
+        score: clamp(gear * 0.45 + recency * 0.35 + guilded * 0.12 + titled * 0.08),
+      };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored[0];
+    const runnerUp = scored[1] || null;
+    const lead = runnerUp ? top.score - runnerUp.score : 1;
+
+    return {
+      character: top.character,
+      detail: top.detail,
+      score: top.score,
+      lead,
+      // How many item levels clear of the next-best character, when there is
+      // one — the comparison that makes the claim feel earned rather than
+      // asserted, and the only figure the UI can't read off a single row.
+      gearLead: runnerUp && runnerUp.detail.itemLevel ? top.detail.itemLevel - runnerUp.detail.itemLevel : null,
+      // Whether this is also the character last logged into, which is a
+      // separate claim from being the best geared and worth saying out loud.
+      isNewest: newestLogin !== null && top.detail.lastLogin === newestLogin,
+      // Below the lead threshold the recap says "nobody clearly", so this flag
+      // is what the wording keys off rather than the score.
+      isClear: lead >= MAIN_MIN_LEAD,
+      runnerUp: runnerUp ? { character: runnerUp.character, detail: runnerUp.detail } : null,
+      homeGuild: homeCount > 1 ? homeGuild : null,
+      ranked: scored,
+    };
+  }
+
   // The longest stretch with no achievement anywhere on the account, and
   // whether play resumed after it — the "you came back" signal.
   function buildGap(entries) {
@@ -412,13 +611,17 @@
 
   // --- entry point ----------------------------------------------------------
 
-  // `activity` and `lastLogins` are optional: the achievement history is a
-  // slow, failure-prone read, and the composition chapters (faction / race /
-  // class) plus a reduced verdict still work without it.
-  function build({ characters, activity, lastLogins }) {
+  // `activity`, `detail` and `raids` are all optional: each is a slow,
+  // failure-prone per-character read, and the composition chapters (faction /
+  // race / class) plus a reduced verdict still work without any of them. The
+  // main chapter needs `detail`, the expansion eras need `raids`, and each
+  // drops out on its own rather than taking the others with it.
+  function build({ characters, activity, detail, raids }) {
     const entries = (activity && activity.entries) || [];
     const accountWide = (activity && activity.accountWide) || [];
-    const logins = lastLogins || new Map();
+    const detailByKey = detail || new Map();
+    const logins = window.BnetProfile.lastLoginsFrom(detailByKey);
+    const raidRows = (raids && raids.rows) || [];
 
     const factions = buildFactions(characters);
     const races = window.BnetProfile.countBy(characters, "race");
@@ -427,6 +630,8 @@
 
     const { lanes, years } = buildLanes(characters, entries, logins);
     const { eras, switches, reigns } = buildEras(entries);
+    const expansions = buildExpansionEras(raidRows);
+    const currentMain = buildCurrentMain(characters, detailByKey);
     const gap = buildGap(entries);
 
     const firstSeen = lanes.length && lanes[0].firstSeen !== null ? lanes[0].firstSeen : null;
@@ -481,6 +686,20 @@
         least: uniqueLeast(classes),
       },
       timeline: { lanes, years, eras, reigns },
+      // Everything the recap knows about "who is the main": `current` from
+      // gear and recency, `eras`/`reigns` from raid kills per expansion.
+      // Either half can be null or empty on its own — an account that has
+      // never raided has no eras but still has a current main, and vice versa.
+      main: {
+        current: currentMain,
+        eras: expansions.eras,
+        reigns: expansions.reigns,
+        switches: expansions.switches,
+        detail: detailByKey,
+      },
+      // Points per achievement category, account-wide — the closest thing to
+      // a playstyle breakdown the API computes for us.
+      categories: (activity && activity.categories) || [],
       milestones: accountWide,
       gap,
       verdict: ranked[0],

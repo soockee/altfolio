@@ -12,6 +12,8 @@
     return new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "long", timeZone: "UTC" });
   }
 
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -327,6 +329,122 @@
     return section;
   }
 
+  // Chapter five. The one chapter that names a single character and commits to
+  // it — so it is also the one that has to be most careful about saying
+  // "probably" when the data only supports "probably".
+  //
+  // Two independent halves: who the main is now (gear, recency, guild) and who
+  // held each expansion (raid kills). Either can be missing — an account with
+  // no raid history has no eras, and a roster where nothing is geared has no
+  // current main — so each half is built only if it has something to say, and
+  // the chapter is skipped entirely when neither does.
+  function mainChapter(journey, token, ordinal) {
+    const m = journey.main;
+    const current = m.current;
+    const eras = m.eras;
+
+    let headline;
+    let lede = null;
+
+    if (current && current.isClear) {
+      headline = `Right now, it's ${current.character.name}.`;
+      lede = `Your ${current.character.race} ${current.character.class} on ${current.character.realm} — the best-geared, most recently played character you own.`;
+    } else if (current) {
+      headline = "Nobody's clearly in charge.";
+      lede = current.runnerUp
+        ? `${current.character.name} and ${current.runnerUp.character.name} are close enough that picking one would be guessing.`
+        : `Nothing on your roster stands far enough ahead to call it the main.`;
+    } else if (eras.length) {
+      headline = "Your main is a matter of history.";
+      lede = "Nothing on the roster is geared enough to claim the title today, but the raid logs remember who used to.";
+    } else {
+      return null;
+    }
+
+    const { section, body } = chapter("chapter-main", `Chapter ${ordinal} · The main`, headline, lede);
+
+    if (current && current.isClear) {
+      const d = current.detail;
+      const tiles = [];
+      if (d.itemLevel) {
+        tiles.push({
+          label: "Item level",
+          value: String(d.itemLevel),
+          sub: current.gearLead > 0 ? `+${current.gearLead} on your next best` : null,
+        });
+      }
+      if (d.lastLogin) {
+        tiles.push({
+          label: "Last played",
+          value: monthYear(d.lastLogin),
+          sub: current.isNewest ? "the last one you logged into" : null,
+        });
+      }
+      if (d.guild) {
+        tiles.push({
+          label: "Guild",
+          value: d.guild,
+          sub: current.homeGuild === d.guild ? "where most of your roster sits" : null,
+        });
+      }
+      if (d.activeSpec) tiles.push({ label: "Spec", value: `${d.activeSpec} ${current.character.class}` });
+
+      if (tiles.length) {
+        const kpis = el("div", "kpi-row");
+        body.appendChild(kpis);
+        window.BnetCharts.renderKpiRow(kpis, tiles);
+      }
+
+      // The portrait is the one place a character stops being a row of numbers,
+      // so it gets the sentence that reads most like a person rather than a
+      // statistic — the title if they have one out, the gear gap otherwise.
+      const line = d.activeTitle
+        ? `You have them out as “${d.activeTitle}”.`
+        : current.gearLead > 0
+          ? `${plural(current.gearLead, "item level", "item levels")} clear of anything else you own.`
+          : `The one you keep coming back to.`;
+      body.appendChild(spotlight(current.character, line, token));
+    }
+
+    if (eras.length) {
+      const viz = el("div");
+      body.appendChild(viz);
+      window.BnetCharts.renderReigns(viz, eras, {
+        note: "The API records only the last time each boss died, so this marks which expansion a character raided in — not how often they turned up.",
+      });
+
+      // Handovers between expansions are the story the ribbon tells at a
+      // glance; naming them makes it readable without hovering anything.
+      const holders = [];
+      for (const reign of m.reigns) {
+        if (!holders.includes(reign.character.name)) holders.push(reign.character.name);
+      }
+      if (holders.length > 1) {
+        body.appendChild(
+          callout(
+            `${holders.slice(0, 4).join(", then ")}${holders.length > 4 ? ", and others" : ""} — the raid logs hand your main over ${holders.length === 2 ? "once" : `${holders.length - 1} times`}.`
+          )
+        );
+      } else if (holders.length === 1 && eras.length > 1) {
+        body.appendChild(
+          callout(`${holders[0]} led every expansion you raided. That is a long time to keep one character.`)
+        );
+      }
+    }
+
+    // The one claim worth undercutting explicitly: none of this is stated by
+    // the API, and someone whose main is currently parked will spot it.
+    if (current && current.isClear) {
+      body.appendChild(
+        callout(
+          "The API never says which character is your main. This one is picked from gear, last-played date and guild — the three things a main tends to have that an alt doesn't."
+        )
+      );
+    }
+
+    return section;
+  }
+
   function verdictChapter(journey) {
     const v = journey.verdict;
 
@@ -422,11 +540,25 @@
       );
     }
 
+    // Where the account's achievement points actually sit. Blizzard buckets
+    // these itself, so this is its own answer to "what kind of player is
+    // this", not ours — worth showing next to the archetype we inferred.
+    if (journey.categories.length) {
+      const viz = el("div");
+      body.appendChild(viz);
+      window.BnetCharts.renderBarChart(
+        viz,
+        "Achievement points by category",
+        journey.categories.slice(0, 10).map((c) => ({ label: c.label, count: c.points })),
+        { unit: "points" }
+      );
+    }
+
     const roster = el("div", "viz-root chart-card");
     const table = el("table", "chart-table roster-table");
     const thead = el("thead");
     const headRow = el("tr");
-    for (const label of ["Character", "Realm", "Level", "Race", "Class", "Faction"]) {
+    for (const label of ["Character", "Realm", "Level", "Item level", "Race", "Class", "Faction", "Guild"]) {
       const th = el("th", null, label);
       th.scope = "col";
       headRow.appendChild(th);
@@ -435,13 +567,21 @@
     table.appendChild(thead);
 
     const tbody = el("tbody");
-    const sorted = journey.characters.slice().sort((a, b) => (b.level || 0) - (a.level || 0));
+    const detail = journey.main.detail;
+    // Item level, then level: the roster reads as "how far did each of these
+    // actually get", and at the level cap only gear separates them.
+    const sorted = journey.characters.slice().sort((a, b) => {
+      const ai = (detail.get(a.key) && detail.get(a.key).itemLevel) || 0;
+      const bi = (detail.get(b.key) && detail.get(b.key).itemLevel) || 0;
+      return (b.level || 0) - (a.level || 0) || bi - ai;
+    });
     for (const c of sorted) {
+      const d = detail.get(c.key) || {};
       const tr = el("tr");
       const th = el("th", null, c.name);
       th.scope = "row";
       tr.appendChild(th);
-      for (const value of [c.realm, c.level, c.race]) {
+      for (const value of [c.realm, c.level, d.itemLevel, c.race]) {
         tr.appendChild(el("td", null, value === undefined || value === null ? "—" : String(value)));
       }
 
@@ -458,6 +598,7 @@
       tr.appendChild(classTd);
 
       tr.appendChild(el("td", null, c.faction === undefined || c.faction === null ? "—" : String(c.faction)));
+      tr.appendChild(el("td", null, d.guild || "—"));
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -552,6 +693,11 @@
     container.appendChild(racesChapter(journey, token));
     container.appendChild(classesChapter(journey));
     if (journey.hasHistory) container.appendChild(timelineChapter(journey, token));
+    // Numbered by where it actually lands: the timeline chapter ahead of it is
+    // conditional, so a hard-coded "chapter five" would skip four on an
+    // account with no dated history.
+    const main = mainChapter(journey, token, journey.hasHistory ? "five" : "four");
+    if (main) container.appendChild(main);
     container.appendChild(verdictChapter(journey));
     container.appendChild(numbersChapter(journey, activity));
     revealOnScroll(container);

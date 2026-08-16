@@ -30,9 +30,14 @@ export default {
         return proxy(request, env, cors, "/profile/user/wow");
       }
 
-      // All three take the same realm/character pair and differ only in
+      // All four take the same realm/character pair and differ only in
       // which profile sub-resource they read.
-      if (url.pathname === "/character" || url.pathname === "/achievements" || url.pathname === "/media/character") {
+      if (
+        url.pathname === "/character" ||
+        url.pathname === "/achievements" ||
+        url.pathname === "/raids" ||
+        url.pathname === "/media/character"
+      ) {
         const realm = url.searchParams.get("realm");
         const character = url.searchParams.get("character");
         if (!realm || !character) {
@@ -40,15 +45,25 @@ export default {
         }
 
         // Character Profile Summary carries `last_login_timestamp`, the only
-        // first-class "when was this played" field in the API. The
-        // achievements summary carries a `completed_timestamp` per
-        // achievement — the closest thing to a history the API exposes,
-        // since there is no playtime or character-creation-date endpoint.
+        // first-class "when was this played" field in the API — plus item
+        // level, guild and equipped title, which are the strongest "this is
+        // my main" signals the API exposes. The achievements summary carries
+        // a `completed_timestamp` per achievement — the closest thing to a
+        // history the API exposes, since there is no playtime or
+        // character-creation-date endpoint. encounters/raids carries a
+        // `last_kill_timestamp` per boss per difficulty, grouped under a
+        // named expansion: the one dated, per-character progress record the
+        // API reports that account-wide sharing can't contaminate.
         // character-media carries the Armory portrait renders — see
         // docs/wow-art-resources.md for why these are fetched live rather
         // than bundled.
         const base = `/profile/wow/character/${encodeURIComponent(realm.toLowerCase())}/${encodeURIComponent(character.toLowerCase())}`;
-        const suffix = { "/achievements": "/achievements", "/media/character": "/character-media" }[url.pathname] || "";
+        const suffix =
+          {
+            "/achievements": "/achievements",
+            "/raids": "/encounters/raids",
+            "/media/character": "/character-media",
+          }[url.pathname] || "";
         return proxy(request, env, cors, `${base}${suffix}`);
       }
 

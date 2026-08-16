@@ -1,7 +1,7 @@
 // The loading stage — what replaces the landing page from the moment "Begin
 // Journey" is pressed until the recap is ready to scroll.
 //
-// This exists because the wait is long and unavoidable: the journey costs two
+// This exists because the wait is long and unavoidable: the journey costs three
 // Blizzard reads per character, so a large account genuinely takes the better
 // part of a minute. A spinner for that long reads as "broken". So the wait is
 // staged instead — real progress, the real characters being read as they go
@@ -21,8 +21,9 @@
   const PHASES = [
     ["connect", "Sign in", "Opening Battle.net", "Handing you over to Blizzard to authorise this."],
     ["characters", "Roster", "Finding your characters", "Reading every character on your account."],
-    ["detail", "Dates", "Dating your roster", "One read each, for when they were last played."],
+    ["detail", "Dates", "Dating your roster", "One read each, for gear, guild and when they were last played."],
     ["history", "History", "Digging up your past", "Every achievement you earned, and the day you earned it."],
+    ["raids", "Raids", "Counting the bosses you killed", "Which expansions each character actually raided."],
     ["verdict", "Verdict", "Working out who you've been", "Scoring your account against every archetype."],
   ];
 

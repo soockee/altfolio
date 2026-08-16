@@ -885,8 +885,25 @@ pre {
   font-variant-numeric: tabular-nums;
 }
 
+/* Expansion reigns reuse the bar row, but their trailing cell carries a
+   character name rather than a count, so it needs room and the crown that
+   marks a main everywhere else in the recap. */
+.reign-row { grid-template-columns: 9rem 1fr 9rem; }
+.reign-holder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  color: var(--main-accent);
+  font-variant-numeric: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 30rem) {
   .bar-row { grid-template-columns: 7rem 1fr 2.2rem; }
+  .reign-row { grid-template-columns: 6rem 1fr 6.5rem; }
 }
 
 /* --- faction tug-of-war --------------------------------------------------- */

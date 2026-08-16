@@ -17,6 +17,12 @@
 // character that happens to report them, they *are* the account-wide
 // milestone history, so they come back as `accountWide`.
 (function () {
+  // Alongside the completion list, the same response carries `total_points`,
+  // `total_quantity` and — the useful one — `category_progress`: points and
+  // quantity per achievement category (Raiding, PvP, Exploration, Professions,
+  // Pet Battles…), already bucketed by Blizzard. That is a playstyle
+  // fingerprint for free, in a request we were making anyway and reading one
+  // field of.
   async function fetchAchievements(accessToken, character) {
     const cfg = window.OAUTH_CONFIG;
     const params = new URLSearchParams({ realm: character.realmSlug, character: character.name });
@@ -34,7 +40,37 @@
         entries.push({ achievementId, name, timestamp: a.completed_timestamp });
       }
     }
-    return entries;
+
+    const categories = [];
+    for (const c of body.category_progress || []) {
+      const label = c.category && c.category.name;
+      if (label && typeof c.points === "number") {
+        categories.push({ label, points: c.points, quantity: c.quantity || 0 });
+      }
+    }
+
+    return {
+      entries,
+      categories,
+      totalPoints: typeof body.total_points === "number" ? body.total_points : null,
+      totalQuantity: typeof body.total_quantity === "number" ? body.total_quantity : null,
+    };
+  }
+
+  // Account-level category totals, taken as the **maximum** across characters
+  // rather than the sum. Achievement points are largely account-wide now, so
+  // every character reports most of the same categories; summing would count
+  // the account's Exploration points once per alt. The best-placed character's
+  // figure is the closest single honest estimate of the account's total.
+  function mergeCategories(perCharacter) {
+    const best = new Map();
+    for (const { categories } of perCharacter) {
+      for (const { label, points, quantity } of categories || []) {
+        const current = best.get(label);
+        if (!current || points > current.points) best.set(label, { label, points, quantity });
+      }
+    }
+    return Array.from(best.values()).sort((a, b) => b.points - a.points);
   }
 
   // Fetches achievements for every character with a known realm and splits
@@ -52,8 +88,17 @@
     const perCharacter = [];
     const failures = [];
     for (const { item, value, error } of settled) {
-      if (value) perCharacter.push({ character: item, entries: value });
-      else failures.push({ character: item, error });
+      if (value) {
+        perCharacter.push({
+          character: item,
+          entries: value.entries,
+          categories: value.categories,
+          totalPoints: value.totalPoints,
+          totalQuantity: value.totalQuantity,
+        });
+      } else {
+        failures.push({ character: item, error });
+      }
     }
 
     if (perCharacter.length === 0) {
@@ -90,7 +135,7 @@
     }
 
     accountWide.sort((a, b) => a.timestamp - b.timestamp);
-    return { entries: kept, accountWide, failures };
+    return { entries: kept, accountWide, failures, categories: mergeCategories(perCharacter) };
   }
 
   function monthKey(timestampMs) {
@@ -108,5 +153,5 @@
     return Array.from(counts, ([label, count]) => ({ label, count })).sort((a, b) => (a.label < b.label ? -1 : 1));
   }
 
-  window.BnetActivity = { fetchActivity, monthlyTotals };
+  window.BnetActivity = { fetchActivity, monthlyTotals, mergeCategories };
 })();

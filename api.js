@@ -2,9 +2,11 @@
 // the Worker proxy, plus a bounded-concurrency map for the per-character
 // fetches.
 //
-// The concurrency cap matters: building the journey costs two requests per
-// character (detail + achievements), so a 40-alt account is 80 requests.
-// Firing those all at once risks Blizzard's rate limit and saturates the
+// The concurrency cap matters: building the journey costs three requests per
+// character (detail + achievements + raids), so a 40-alt account is 120
+// requests. Firing those all at once risks Blizzard's rate limit — 100 per
+// second and 36,000 per hour, counted per OAuth client and therefore shared
+// across everyone using altfolio, not per signed-in user — and saturates the
 // browser's connection pool for no gain.
 (function () {
   const CONCURRENCY = 6;
