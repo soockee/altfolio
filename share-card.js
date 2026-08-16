@@ -9,20 +9,51 @@
   const H = 1350;
   const PAD = 90;
 
-  // Dark-mode steps from the same palette the charts use, since the card is
-  // always dark.
-  const INK = "#ffffff";
-  const INK_SECONDARY = "#c3c2b7";
-  const INK_MUTED = "#898781";
-  const SURFACE = "#1a1a19";
-  const PLANE = "#0d0d0d";
+  // The vault steps from the same palette the verdict chapter pins itself to,
+  // since the card is always dark.
+  const INK = "#f1e9d8";
+  const INK_SECONDARY = "#b4a788";
+  const INK_MUTED = "#8a7d63";
+  const SURFACE = "#1e1912";
+  const PLANE = "#14110d";
   const ALLIANCE = "#3987e5";
   const HORDE = "#e66767";
-  // Same "this was your main" gold the timeline chapter marks eras with.
-  const GOLD = "#f2c14e";
+  // Same "this was your main" gold the timeline chapter marks eras with, and
+  // the same gold the Reliquary Frame is drawn in.
+  const GOLD = "#e3b54f";
+  const FRAME_INNER = "#6b5122";
 
   const SANS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+  // The card's own type split, matching the page: Cinzel declares, the system
+  // sans reports. Georgia is in the stack because canvas silently falls back to
+  // a default face for a family it cannot resolve, and a serif fallback keeps
+  // the card's voice if the webfont request has not landed by the time someone
+  // hits share.
+  const DISPLAY = '"Cinzel", Georgia, serif';
+  const BODY = '"Spectral", Georgia, serif';
   const font = (weight, size) => `${weight} ${size}px ${SANS}`;
+  const displayFont = (weight, size) => `${weight} ${size}px ${DISPLAY}`;
+  const bodyFont = (weight, size) => `${weight} ${size}px ${BODY}`;
+
+  // The Reliquary Frame, drawn rather than styled: gold hairline, dark oak
+  // inset line, four rivets. Same construction as the DOM frame, so the shared
+  // image and the page it came from read as the same artifact.
+  function drawFrame(ctx, x, y, w, h) {
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+
+    ctx.strokeStyle = FRAME_INNER;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x + 5, y + 5, w - 10, h - 10);
+
+    ctx.fillStyle = GOLD;
+    for (const [rx, ry] of [[x + 24, y + 24], [x + w - 24, y + 24], [x + 24, y + h - 24], [x + w - 24, y + h - 24]]) {
+      ctx.beginPath();
+      ctx.arc(rx, ry, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 
   // Where the fixed lower third begins: stat strip, faction bar and footer are
   // pinned so the card's bottom half is identical whatever the verdict runs
@@ -114,7 +145,10 @@
   // it. This is the part a player recognises themselves in, so the name gets
   // the weight and the statistics stay subordinate.
   const ROW_H = 88;
-  const KEY_W = 200;
+  // 216, not 200: a full four-digit range ("2007–2011") measures 182px at this
+  // weight and size, which overran the old 180px budget by two pixels and
+  // ellipsised the end year off every multi-year reign on the card.
+  const KEY_W = 216;
 
   function drawNamedRow(ctx, row, x, y, inner) {
     ctx.fillStyle = GOLD;
@@ -188,37 +222,47 @@
     ctx.fillStyle = PLANE;
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = SURFACE;
-    roundRect(ctx, 32, 32, W - 64, H - 64, 40);
+    // Near-square: carved stone does not have a 40px radius.
+    roundRect(ctx, 32, 32, W - 64, H - 64, 4);
+    drawFrame(ctx, 32, 32, W - 64, H - 64);
 
     const inner = W - PAD * 2;
     let y = PAD + 10;
 
     // Masthead, with the span of the account on the right — the years are the
     // frame everything under them is measured against.
-    ctx.fillStyle = INK_MUTED;
-    ctx.font = font(600, 26);
+    ctx.fillStyle = GOLD;
+    ctx.font = displayFont(600, 26);
     ctx.letterSpacing = "4px";
     ctx.fillText("ALTFOLIO · YOUR WOW JOURNEY", PAD, y);
+    ctx.letterSpacing = "0px";
+    // The span of the account, on the right — the years are the frame
+    // everything under them is measured against, so they stay in the data face
+    // with every other number on the card.
     const years = (journey.timeline && journey.timeline.years) || [];
     if (years.length) {
       const span = years.length === 1 ? String(years[0]) : `${years[0]}–${years[years.length - 1]}`;
+      ctx.fillStyle = INK_MUTED;
+      ctx.font = font(600, 26);
       ctx.fillText(span, PAD + inner - ctx.measureText(span).width, y);
     }
-    ctx.letterSpacing = "0px";
     y += 74;
 
-    // Verdict
+    // Verdict. The card's prose follows the page's split — Spectral for the
+    // sentences, the data face for every number below.
     ctx.fillStyle = INK_SECONDARY;
-    ctx.font = font(400, 34);
+    ctx.font = bodyFont(400, 34);
     ctx.fillText("You are", PAD, y);
     y += 58;
 
     ctx.fillStyle = INK;
-    ctx.font = font(700, 90);
-    y = drawLines(ctx, wrap(ctx, journey.verdict.title, inner, 2), PAD, y, 98) + 12;
+    ctx.font = displayFont(700, 82);
+    ctx.letterSpacing = "2px";
+    y = drawLines(ctx, wrap(ctx, String(journey.verdict.title).toUpperCase(), inner, 2), PAD, y, 96) + 12;
+    ctx.letterSpacing = "0px";
 
     ctx.fillStyle = INK_SECONDARY;
-    ctx.font = font(400, 36);
+    ctx.font = bodyFont(400, 36);
     y = drawLines(ctx, wrap(ctx, journey.verdict.tagline, inner, 2), PAD, y, 48) + 46;
 
     // Named characters — the reason anyone shares this. How many rows fit
@@ -247,10 +291,10 @@
 
     // Evidence, filling whatever is left — the verdict's supporting lines are
     // worth having but they yield to the names above them.
-    ctx.font = font(400, 30);
+    ctx.font = bodyFont(400, 30);
     for (const line of journey.verdict.evidence) {
       if (y + 52 > STATS_Y - 60) break;
-      ctx.fillStyle = ALLIANCE;
+      ctx.fillStyle = GOLD;
       ctx.fillText("•", PAD, y);
       ctx.fillStyle = INK_SECONDARY;
       y = drawLines(ctx, wrap(ctx, line, inner - 34, 1), PAD + 34, y, 40) + 12;
@@ -260,7 +304,7 @@
     // verdict text runs to. The hairline above it turns the slack left by a
     // short verdict into deliberate separation rather than a hole.
     y = Math.max(y + 40, STATS_Y);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.fillStyle = "rgba(227, 181, 79, 0.35)";
     ctx.fillRect(PAD, y - 36, inner, 1);
 
     const t = journey.totals;

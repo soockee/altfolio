@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>altfolio — your WoW journey</title>
 <meta name="description" content="Sign in with Battle.net and see your World of Warcraft history rebuilt as a scrollable recap, ending in a verdict on who you've been all along." />
+<!-- Cinzel for words that are declared, Spectral for prose. Numbers stay in the
+     system sans, which needs no request. `display=swap` so a slow font request
+     never blocks the recap from painting — the fallback serifs in the stack are
+     what shows in the meantime, and both faces are decorative rather than
+     load-bearing. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" />
 <link rel="stylesheet" href="styles.css" />
 <script>
   // Runs before the landing markup is parsed. Returning from Battle.net, or

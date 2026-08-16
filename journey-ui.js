@@ -455,6 +455,14 @@
     inner.appendChild(el("p", "chapter-eyebrow", "The verdict"));
 
     const card = el("div", "verdict-card");
+    // The side you actually played, as a single accent stripe down the card's
+    // edge rather than a background wash — the frame carries the theming, the
+    // faction carries one piece of information. A dead-even account gets no
+    // stripe, because claiming a side it never picked would be a lie.
+    const split = journey.factions;
+    if (split && split.total > 0 && split.alliance !== split.horde) {
+      card.dataset.faction = split.alliance > split.horde ? "Alliance" : "Horde";
+    }
     card.appendChild(el("p", "verdict-kicker", "Your WoW journey says you are"));
     card.appendChild(el("h2", "verdict-title", v.title));
     card.appendChild(el("p", "verdict-tagline", v.tagline));
